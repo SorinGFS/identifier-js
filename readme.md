@@ -1,6 +1,6 @@
 ---
 
-title: Identifiers
+title: Identifier JS
 
 description: A RFC3986 / RFC3987 compliant fast parser/validator/resolver/composer for NodeJS and browser.
 
@@ -13,5 +13,5 @@ A fully RFC [3986](https://datatracker.ietf.org/doc/html/rfc3986.html)/[3897](ht
 ## Install
 
 ```bash title="console"
-npm i identifiers
+npm i identifier-js
 ```
