@@ -1,5 +1,5 @@
 {
-  "name": "identifier",
+  "name": "identifiers",
   "version": "0.0.1",
   "description": "A RFC3986 / RFC3987 compliant fast parser/validator/resolver/composer for NodeJS and browser.",
   "keywords": [
@@ -17,13 +17,13 @@
     "RFC",
     "3986"
   ],
-  "homepage": "https://github.com/SorinGFS/identifier#readme",
+  "homepage": "https://github.com/SorinGFS/identifiers#readme",
   "bugs": {
-    "url": "https://github.com/SorinGFS/identifier/issues"
+    "url": "https://github.com/SorinGFS/identifiers/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/SorinGFS/identifier.git"
+    "url": "git+https://github.com/SorinGFS/identifiers.git"
   },
   "license": "MIT",
   "author": "SorinGFS",
