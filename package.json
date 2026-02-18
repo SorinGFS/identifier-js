@@ -30,9 +30,10 @@
   "type": "commonjs",
   "main": "index.js",
   "scripts": {
-    "update-deps": "npx npm-check-updates -u && npm install"
+    "update-deps": "npx npm-check-updates -u && npm install",
+    "test": "node tests/vitest-setup && npm test"
   },
   "dependencies": {
-    "url-templates": "^1.0.3"
+    "url-templates": "^1.0.4"
   }
 }
