@@ -12,6 +12,10 @@ A fully RFC [3986](https://datatracker.ietf.org/doc/html/rfc3986.html)/[3897](ht
 
 ## Install
 
+### Requirements
+
+- `regular expression with unicode support`, available in modern browsers and `NodeJS 18+`
+
 ```bash title="console"
 npm i identifier-js
 ```

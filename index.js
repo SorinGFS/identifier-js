@@ -19,8 +19,8 @@ const commonRules = {
     gen_delims: '[:/?#[\\]@]',
     sub_delims: "[!&'()*+,;=$]",
     hexdig: '[0-9A-Fa-f]',
-    uuid: '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}',
-    uuid_v4: '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}',
+    UUID: '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}',
+    UUID_v4: '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}',
 };
 // RFC3986 rules
 const uriRules = {
@@ -105,15 +105,18 @@ const rules = Object.assign({}, commonRules, uriRules, iriRules);
 const addNames = (key) => (groupNames[key] ? `(?<${groupNames[key]}>${rules[key]})` : rules[key]);
 // parse (slower, it uses regex.exec and includes named capture groups)
 const parse = (string, rule) => {
+    if (typeof string !== 'string') throw new TypeError(`Invalid ${rule.replace('_', '-')} type: must be a string.`);
     if (!patterns.has('_' + rule)) patterns.set('_' + rule, new RegExp(`^${recursiveCompile(rules, rule, addNames)}$`, 'u'));
     const match = patterns.get('_' + rule).exec(string);
     if (match) return match.groups;
-    throw new TypeError(`Invalid ${rule.replace('_', '-')}: ${string}`);
+    throw new SyntaxError(`Invalid ${rule.replace('_', '-')}: ${string}`);
 };
 // validate (faster, it uses regex.test and does not include named capture groups)
 const validate = (string, rule) => {
+    if (typeof string !== 'string') throw new TypeError(`Invalid ${rule.replace('_', '-')} type: must be a string.`);
     if (!patterns.has(rule)) patterns.set(rule, new RegExp(`^${recursiveCompile(rules, rule)}$`, 'u'));
-    return patterns.get(rule).test(string);
+    if (patterns.get(rule).test(string)) return true;
+    throw new SyntaxError(`Invalid ${rule.replace('_', '-')}: ${string}`);
 };
 // compose as per RFC 3986 Section 5.3 (component recomposition)
 function compose(parts = {}) {
@@ -249,8 +252,8 @@ const toRelativeReference = (target, base) => {
 };
 // export
 module.exports = {
-    isUUID: (string) => validate(string, 'uuid'),
-    isUUIDv4: (string) => validate(string, 'uuid_v4'),
+    isUUID: (string) => validate(string, 'UUID'),
+    isUUIDv4: (string) => validate(string, 'UUID_v4'),
     isUri: (string) => validate(string, 'URI'),
     isUriReference: (string) => validate(string, 'URI_reference'),
     isAbsoluteUri: (string) => validate(string, 'absolute_URI'),

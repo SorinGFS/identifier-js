@@ -1,25 +1,43 @@
-export const isUUID: (string: string) => boolean;
-export const isUUIDv4: (string: string) => boolean;
+/** @throws {Error} If the UUID is invalid. */
+export const isUUID: (string: string) => true;
+/** @throws {Error} If the UUID-v4 is invalid. */
+export const isUUIDv4: (string: string) => true;
 
-export const isUri: (uri: string) => boolean;
-export const isUriReference: (uriReference: string) => boolean;
-export const isAbsoluteUri: (uri: string) => boolean;
+/** @throws {Error} If the URI is invalid. */
+export const isUri: (uri: string) => true;
+/** @throws {Error} If the URI-reference is invalid. */
+export const isUriReference: (uriReference: string) => true;
+/** @throws {Error} If the absolute-URI is invalid. */
+export const isAbsoluteUri: (uri: string) => true;
 
+/** @throws {Error} If the URI is invalid. */
 export const parseUri: (uri: string) => IdentifierComponents;
+/** @throws {Error} If the URI-reference is invalid. */
 export const parseUriReference: (uriReference: string) => RelativeIdentifierComponents;
+/** @throws {Error} If the absolute-URI is invalid. */
 export const parseAbsoluteUri: (uri: string) => AbsoluteIdentifierComponents;
 
-export const isIri: (iri: string) => boolean;
-export const isIriReference: (iriReference: string) => boolean;
-export const isAbsoluteIri: (iri: string) => boolean;
+/** @throws {Error} If the IRI is invalid. */
+export const isIri: (iri: string) => true;
+/** @throws {Error} If the IRI-reference is invalid. */
+export const isIriReference: (iriReference: string) => true;
+/** @throws {Error} If the absolute-IRI is invalid. */
+export const isAbsoluteIri: (iri: string) => true;
 
+/** @throws {Error} If the IRI is invalid. */
 export const parseIri: (iri: string) => IdentifierComponents;
+/** @throws {Error} If the IRI-reference is invalid. */
 export const parseIriReference: (iriReference: string) => RelativeIdentifierComponents;
+/** @throws {Error} If the absolute-IRI is invalid. */
 export const parseAbsoluteIri: (iri: string) => AbsoluteIdentifierComponents;
 
+/** @throws {Error} If the reference is invalid. */
 export const normalizeReference: (reference: string) => string;
+/** @throws {Error} If the base or the reference is invalid. */
 export const resolveReference: (reference: string, base: string, strict?: boolean, returnParts?: boolean) => string;
+/** @throws {Error} If the reference is invalid. */
 export const toAbsoluteReference: (reference: string) => string;
+/** @throws {Error} If the base or the reference is invalid. */
 export const toRelativeReference: (target: string, base: string) => string;
 
 type IdentifierComponents = {
