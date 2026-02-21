@@ -11,7 +11,7 @@ const commonRules = {
     ls32: '(?:{h16}:{h16}|{IPv4address})',
     h16: '{hexdig}{1,4}',
     IPv4address: '(?:{dec_octet}\\.){3}{dec_octet}',
-    dec_octet: '(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)',
+    dec_octet: '(?:\\d|[1-9]\\d|1\\d{2}|2[0-4]\\d|25[0-5])',
     IPvFuture: 'v{hexdig}+\\.(?:{unreserved}|{sub_delims}|:)+',
     unreserved: '[a-zA-Z0-9_.~-]',
     reserved: '(?:{gen_delims}|{sub_delims})',
