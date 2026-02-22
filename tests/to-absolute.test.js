@@ -3,7 +3,7 @@ import id from '../index.js';
 
 describe('toAbsoluteReference', () => {
     test('Base with a fragment', () => {
-        expect(id.toAbsoluteReference('http://examplé://examplé.org/rosé#dasd')).to.equal('http://examplé://examplé.org/rosé');
+        expect(id.toAbsoluteReference('http://examplé.org/rosé#dasd')).to.equal('http://examplé.org/rosé');
     });
 
     test('Scheme is required', () => {

@@ -2,25 +2,26 @@
 // a valid URI is always a valid IRI
 const { recursiveCompile } = require('url-templates');
 const patterns = new Map();
-// RFC3986/RFC3987 common rules
+// RFC3986/RFC3987 common rules + https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.2:~:text=DNS%29%2E-,A,of%20%5BRFC1123%5D%2E
 const commonRules = {
     scheme: '[a-zA-Z][a-zA-Z0-9+.-]*',
-    port: '[0-9]*',
+    port: '(?:0|[1-9]\\d{0,3}|[1-5]\\d{4}|6[0-4]\\d{3}|65[0-4]\\d{2}|655[0-2]\\d|6553[0-5])',
     IP_literal: '\\[(?:{IPv6address}|{IPvFuture})\\]',
     IPv6address: '(?:(?:{h16}:){6}{ls32}|::(?:{h16}:){5}{ls32}|(?:(?:{h16})?)::(?:{h16}:){4}{ls32}|(?:(?:{h16}:)?{h16})?::(?:{h16}:){3}{ls32}|(?:(?:{h16}:){0,2}{h16})?::(?:{h16}:){2}{ls32}|(?:(?:{h16}:){0,3}{h16})?::(?:{h16}:){1}{ls32}|(?:(?:{h16}:){0,4}{h16})?::{ls32}|(?:(?:{h16}:){0,5}{h16})?::{h16}|(?:(?:{h16}:){0,6}{h16})?::)',
     ls32: '(?:{h16}:{h16}|{IPv4address})',
-    h16: '{hexdig}{1,4}',
+    h16: '{hex_digit}{1,4}',
     IPv4address: '(?:{dec_octet}\\.){3}{dec_octet}',
     dec_octet: '(?:\\d|[1-9]\\d|1\\d{2}|2[0-4]\\d|25[0-5])',
-    IPvFuture: 'v{hexdig}+\\.(?:{unreserved}|{sub_delims}|:)+',
+    IPvFuture: 'v{hex_digit}+\\.(?:{unreserved}|{sub_delims}|:)+',
     unreserved: '[a-zA-Z0-9_.~-]',
     reserved: '(?:{gen_delims}|{sub_delims})',
-    pct_encoded: '%{hexdig}{2}',
+    pct_encoded: '%{hex_digit}{2}',
     gen_delims: '[:/?#[\\]@]',
     sub_delims: "[!&'()*+,;=$]",
-    hexdig: '[0-9A-Fa-f]',
-    UUID: '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}',
-    UUID_v4: '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}',
+    hex_digit: '[0-9A-Fa-f]',
+    alpha_digit: '[a-zA-Z0-9]',
+    UUID: '{hex_digit}{8}-{hex_digit}{4}-{hex_digit}{4}-{hex_digit}{4}-{hex_digit}{12}',
+    UUID_v4: '{hex_digit}{8}-{hex_digit}{4}-4{hex_digit}{3}-[89abAB]{hex_digit}{3}-{hex_digit}{12}',
 };
 // RFC3986 rules
 const uriRules = {
@@ -31,9 +32,10 @@ const uriRules = {
     hier_part: '(?:\/\/{authority}{path_abempty}|{path_absolute}|{path_rootless}|{path_empty})',
     relative_part: '(?:\/\/{authority}{path_abempty}|{path_absolute}|{path_noscheme}|{path_empty})',
     authority: '(?:{userinfo}@)?{host}(?::{port})?',
-    host: '(?:{IP_literal}|{IPv4address}|{reg_name})',
     userinfo: '(?:{unreserved}|{pct_encoded}|{sub_delims}|:)*',
-    reg_name: '(?:{unreserved}|{pct_encoded}|{sub_delims})*',
+    host: '(?:{IP_literal}|{IPv4address}|{reg_name})',
+    a_label: '(?:{alpha_digit})(?:(?:{alpha_digit}|-){0,61}(?:{alpha_digit}))?',
+    reg_name: "(?:(?=.{1,255}(?:[:/?#]|$))(?:(?:{a_label})(?:\\.{a_label}))*)",
     path: '(?:{path_abempty}|{path_absolute}|{path_noscheme}|{path_rootless}|{path_empty})',
     path_abempty: '(?:\/{segment})*',
     path_absolute: '\/(?:{segment_nz}(?:\/{segment})*)?',
@@ -58,7 +60,9 @@ const iriRules = {
     iauthority: '(?:{iuserinfo}@)?{ihost}(?::{port})?',
     iuserinfo: '(?:{iunreserved}|{pct_encoded}|{sub_delims}|:)*',
     ihost: '(?:{IP_literal}|{IPv4address}|{ireg_name})',
-    ireg_name: '(?:{iunreserved}|{pct_encoded}|{sub_delims})*',
+    separator: '[\\x2E\\uFF0E\\u3002\\uFF61]',
+    u_label: '(?:{uchar})(?:(?:{uchar}|-){0,61}(?:{uchar}))?',
+    ireg_name: '(?:(?=.{1,255}(?:[:/?#]|$))(?:{u_label})(?:{separator}(?:{u_label}))*)',
     ipath: '(?:{ipath_abempty}|{ipath_absolute}|{ipath_noscheme}|{ipath_rootless}|{ipath_empty})',
     ipath_empty: '',
     ipath_rootless: '{isegment_nz}(?:\/{isegment})*',
@@ -71,8 +75,9 @@ const iriRules = {
     iquery: '(?:{ipchar}|{iprivate}|\/|\\?)*',
     ifragment: '(?:{ipchar}|\/|\\?)*',
     ipchar: '(?:{iunreserved}|{pct_encoded}|{sub_delims}|:|@)',
-    iunreserved: '(?:[a-zA-Z0-9._~-]|{ucschar})',
+    iunreserved: '(?:{unreserved}|{ucschar})',
     iprivate: '[\\uE000-\\uF8FF\\u{F0000}-\\u{FFFFD}\\u{100000}-\\u{10FFFD}]',
+    uchar: '[\\u200C\\u200D\\u00B7\\u0375\\u30FB\\u05F3\\u05F4\\p{L}\\p{N}\\p{Mn}\\p{Mc}]',
     ucschar: '[\\xA0-\\uD7FF\\uF900-\\uFDCF\\uFDF0-\\uFFEF\\u{10000}-\\u{1FFFD}\\u{20000}-\\u{2FFFD}\\u{30000}-\\u{3FFFD}\\u{40000}-\\u{4FFFD}\\u{50000}-\\u{5FFFD}\\u{60000}-\\u{6FFFD}\\u{70000}-\\u{7FFFD}\\u{80000}-\\u{8FFFD}\\u{90000}-\\u{9FFFD}\\u{A0000}-\\u{AFFFD}\\u{B0000}-\\u{BFFFD}\\u{C0000}-\\u{CFFFD}\\u{D0000}-\\u{DFFFD}\\u{E1000}-\\u{EFFFD}]',
 };
 // pattern RFC group names
