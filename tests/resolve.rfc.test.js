@@ -44,6 +44,7 @@ const refs = {
     "g?y/../x"      :  "http://a/b/c/g?y/../x",
     "g#s/./x"       :  "http://a/b/c/g#s/./x",
     "g#s/../x"      :  "http://a/b/c/g#s/../x",
+    "http:g"        :  "http:g",
 }
 
 describe('resolveReference', () => {
