@@ -4,7 +4,8 @@ const { recursiveCompile } = require('url-templates');
 const patterns = new Map();
 // RFC3986/RFC3987 common rules + https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.2:~:text=DNS%29%2E-,A,of%20%5BRFC1123%5D%2E
 const commonRules = {
-    scheme: '[a-zA-Z][a-zA-Z0-9+.-]*',
+    implemented_schemes: '(?:[hH][tT][tT][pP][sS]?|[wW][sS][sS]?|[fF][iI][lL][eE]):',
+    scheme: '(?!{implemented_schemes})[a-zA-Z][a-zA-Z0-9+.-]*',
     port: '(?:0|[1-9]\\d{0,3}|[1-5]\\d{4}|6[0-4]\\d{3}|65[0-4]\\d{2}|655[0-2]\\d|6553[0-5])?',
     IP_literal: '\\[(?:{IPv6address}|{IPvFuture})\\]',
     IPv6address: '(?:(?:{h16}:){6}{ls32}|::(?:{h16}:){5}{ls32}|(?:(?:{h16})?)::(?:{h16}:){4}{ls32}|(?:(?:{h16}:)?{h16})?::(?:{h16}:){3}{ls32}|(?:(?:{h16}:){0,2}{h16})?::(?:{h16}:){2}{ls32}|(?:(?:{h16}:){0,3}{h16})?::(?:{h16}:){1}{ls32}|(?:(?:{h16}:){0,4}{h16})?::{ls32}|(?:(?:{h16}:){0,5}{h16})?::{h16}|(?:(?:{h16}:){0,6}{h16})?::)',
@@ -34,8 +35,7 @@ const uriRules = {
     authority: '(?:{userinfo}@)?{host}(?::{port})?',
     userinfo: '(?:{unreserved}|{pct_encoded}|{sub_delims}|:)*',
     host: '(?:{IP_literal}|{IPv4address}|{reg_name})',
-    a_label: '(?:{alpha_digit})(?:(?:{alpha_digit}|-){0,61}(?:{alpha_digit}))?',
-    reg_name: "(?:(?=.{1,255}(?:[:/?#]|$))(?:{a_label})(?:\\.{a_label})*)",
+    reg_name: '(?:{unreserved}|{pct_encoded}|{sub_delims})*',
     path: '(?:{path_abempty}|{path_absolute}|{path_noscheme}|{path_rootless}|{path_empty})',
     path_abempty: '(?:\/{segment})*',
     path_absolute: '\/(?:{segment_nz}(?:\/{segment})*)?',
@@ -60,9 +60,7 @@ const iriRules = {
     iauthority: '(?:{iuserinfo}@)?{ihost}(?::{port})?',
     iuserinfo: '(?:{iunreserved}|{pct_encoded}|{sub_delims}|:)*',
     ihost: '(?:{IP_literal}|{IPv4address}|{ireg_name})',
-    separator: '[\\x2E\\uFF0E\\u3002\\uFF61]',
-    u_label: '(?:{uchar})(?:(?:{uchar}|-){0,61}(?:{uchar}))?',
-    ireg_name: '(?:(?=.{1,255}(?:[:/?#]|$))(?:{u_label})(?:{separator}(?:{u_label}))*)',
+    ireg_name: '(?:{iunreserved}|{pct_encoded}|{sub_delims})*',
     ipath: '(?:{ipath_abempty}|{ipath_absolute}|{ipath_noscheme}|{ipath_rootless}|{ipath_empty})',
     ipath_empty: '',
     ipath_rootless: '{isegment_nz}(?:\/{isegment})*',
@@ -77,8 +75,17 @@ const iriRules = {
     ipchar: '(?:{iunreserved}|{pct_encoded}|{sub_delims}|:|@)',
     iunreserved: '(?:{unreserved}|{ucschar})',
     iprivate: '[\\uE000-\\uF8FF\\u{F0000}-\\u{FFFFD}\\u{100000}-\\u{10FFFD}]',
-    uchar: '[\\u200C\\u200D\\u00B7\\u0375\\u30FB\\u05F3\\u05F4\\p{L}\\p{N}\\p{Mn}\\p{Mc}]',
     ucschar: '[\\xA0-\\uD7FF\\uF900-\\uFDCF\\uFDF0-\\uFFEF\\u{10000}-\\u{1FFFD}\\u{20000}-\\u{2FFFD}\\u{30000}-\\u{3FFFD}\\u{40000}-\\u{4FFFD}\\u{50000}-\\u{5FFFD}\\u{60000}-\\u{6FFFD}\\u{70000}-\\u{7FFFD}\\u{80000}-\\u{8FFFD}\\u{90000}-\\u{9FFFD}\\u{A0000}-\\u{AFFFD}\\u{B0000}-\\u{BFFFD}\\u{C0000}-\\u{CFFFD}\\u{D0000}-\\u{DFFFD}\\u{E1000}-\\u{EFFFD}]',
+};
+// scheme specific URI reg_name and IRI ireg_name
+const schemeSpecificRules = {
+    scheme: '(?:https?|wss?|file)',
+    reg_name: '(?:(?=.{1,255}(?:[:/?#]|$))(?:{a_label})(?:\\.{a_label})*)',
+    a_label: '(?:{alpha_digit})(?:(?:{alpha_digit}|-){0,61}(?:{alpha_digit}))?',
+    ireg_name: '(?:(?=.{1,255}(?:[:/?#]|$))(?:{u_label})(?:{u_separator}(?:{u_label}))*)',
+    u_label: '(?:{u_char})(?:(?:{u_char}|-){0,61}(?:{u_char}))?',
+    u_separator: '[\\x2E\\uFF0E\\u3002\\uFF61]',
+    u_char: '[\\p{L}\\p{N}\\p{Mn}\\p{Mc}\\u200C\\u200D\\u00B7\\u0375\\u30FB\\u05F3\\u05F4]',
 };
 // pattern RFC group names
 const groupNames = {
@@ -106,21 +113,26 @@ const groupNames = {
     ipath_empty: 'path',
 };
 // all rules into one map
-const rules = Object.assign({}, commonRules, uriRules, iriRules);
-const addNames = (key) => (groupNames[key] ? `(?<${groupNames[key]}>${rules[key]})` : rules[key]);
+const isSpecificScheme = (string) => new RegExp('^' + schemeSpecificRules.scheme + ':').test(string);
+const rules = (specific) => specific ? Object.assign({}, commonRules, uriRules, iriRules, schemeSpecificRules) : Object.assign({}, commonRules, uriRules, iriRules);
 // parse (slower, it uses regex.exec and includes named capture groups)
 const parse = (string, rule) => {
     if (typeof string !== 'string') throw new TypeError(`Invalid ${rule.replace('_', '-')} type: must be a string.`);
-    if (!patterns.has('_' + rule)) patterns.set('_' + rule, new RegExp(`^${recursiveCompile(rules, rule, addNames)}$`, 'u'));
-    const match = patterns.get('_' + rule).exec(string);
+    const specific = isSpecificScheme(string) ? 's' : '';
+    const addNames = (key) => (groupNames[key] ? `(?<${groupNames[key]}>${rules(specific)[key]})` : rules(specific)[key]);
+    const ruleId = '_' + specific + rule;
+    if (!patterns.has(ruleId)) patterns.set(ruleId, new RegExp(`^${recursiveCompile(rules(specific), rule, addNames)}$`, 'u'));
+    const match = patterns.get(ruleId).exec(string);
     if (match) return match.groups;
     throw new SyntaxError(`Invalid ${rule.replace('_', '-')}: ${string}`);
 };
 // validate (faster, it uses regex.test and does not include named capture groups)
 const validate = (string, rule) => {
     if (typeof string !== 'string') throw new TypeError(`Invalid ${rule.replace('_', '-')} type: must be a string.`);
-    if (!patterns.has(rule)) patterns.set(rule, new RegExp(`^${recursiveCompile(rules, rule)}$`, 'u'));
-    if (patterns.get(rule).test(string)) return true;
+    const specific = isSpecificScheme(string) ? 's' : '';
+    const ruleId = specific + rule;
+    if (!patterns.has(ruleId)) patterns.set(ruleId, new RegExp(`^${recursiveCompile(rules(specific), rule)}$`, 'u'));
+    if (patterns.get(ruleId).test(string)) return true;
     throw new SyntaxError(`Invalid ${rule.replace('_', '-')}: ${string}`);
 };
 // compose as per RFC 3986 Section 5.3 (component recomposition)
