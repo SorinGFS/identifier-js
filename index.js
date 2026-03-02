@@ -283,8 +283,9 @@ module.exports = {
     parseIri: (string) => parse(string, 'IRI'),
     parseIriReference: (string) => parse(string, 'IRI_reference'),
     parseAbsoluteIri: (string) => parse(string, 'absolute_IRI'),
-    resolveReference, // not yet decided if the return should be normalized or not, and in what extent
+    resolveReference,
     normalizeReference: (string) => string, // not done yet
     toAbsoluteReference: (string) => resolveReference('', string),
     toRelativeReference,
 };
+

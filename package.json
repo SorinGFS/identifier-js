@@ -12,10 +12,8 @@
     "uuid",
     "parser",
     "validator",
-    "RFC",
-    "3987",
-    "RFC",
-    "3986"
+    "RFC3986",
+    "RFC3987"
   ],
   "homepage": "https://github.com/SorinGFS/identifier-js#readme",
   "bugs": {

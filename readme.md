@@ -8,7 +8,14 @@ description: A RFC3986 / RFC3987 compliant fast parser/validator/resolver/compos
 
 ## Overview
 
-A fully RFC [3986](https://datatracker.ietf.org/doc/html/rfc3986.html)/[3897](https://datatracker.ietf.org/doc/html/rfc3987.html) compliant URI/IRI parser, validator, resolver and composer, along with other identifier utilities.
+A fully RFC [3986](https://datatracker.ietf.org/doc/html/rfc3986.html)/[3897](https://datatracker.ietf.org/doc/html/rfc3987.html) compliant URI/IRI parser, validator, resolver and composer, along with other identifier utilities. This library implements the following [IANA registered](https://www.iana.org/assignments/uri-schemes/uri-schemes.xhtml) schemes:
+- `http` defined by [RFC9110, Section 4.2.1](https://datatracker.ietf.org/doc/html/rfc9110#section-4.2.1)
+- `https` defined by [RFC9110, Section 4.2.2](https://datatracker.ietf.org/doc/html/rfc9110#section-4.2.2)
+- `ws` defined by [RFC6455, Section 3](https://datatracker.ietf.org/doc/html/rfc6455#section-3)
+- `wss` defined by [RFC6455, Section 3](https://datatracker.ietf.org/doc/html/rfc6455#section-3)
+- `file` defined by [RFC8089, Section 2](https://datatracker.ietf.org/doc/html/rfc8089#section-2)
+
+Other schemes that are `IANA registered` schemes and compliant with the generic `URI` or `IRI` syntax are also supported. As for the identifiers that are not `IANA registered`, but compliant with the generic `URI` or `IRI` syntax, the preferred schemes are `uri` and respectively `iri`.
 
 ## Install
 
@@ -81,8 +88,8 @@ Resolve a reference against a base identifier:
 - resolveReference: (reference: string, base: string, strict?: boolean, returnParts?: boolean) => string
 
 **Note:** 
-- strict enables strict resolution behavior.
-- returnParts returns structured components instead of a string.
+- strict (default: `true`) enables strict resolution behavior.
+- returnParts (default: `false`) returns structured components instead of a string.
 
 Convert a reference into absolute form:
 - toAbsoluteReference: (reference: string) => string
