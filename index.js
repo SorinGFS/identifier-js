@@ -2,10 +2,11 @@
 // a valid URI is always a valid IRI
 const { recursiveCompile } = require('url-templates');
 const patterns = new Map();
+const implemented_schemes = '(?:[hH][tT][tT][pP][sS]?|[wW][sS][sS]?|[fF][iI][lL][eE])';
 // RFC3986/RFC3987 common rules + https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.2:~:text=DNS%29%2E-,A,of%20%5BRFC1123%5D%2E
 const commonRules = {
-    implemented_schemes: '(?:[hH][tT][tT][pP][sS]?|[wW][sS][sS]?|[fF][iI][lL][eE]):',
-    scheme: '(?!{implemented_schemes})[a-zA-Z][a-zA-Z0-9+.-]*',
+    implemented_schemes,
+    scheme: '(?!{implemented_schemes}:)[a-zA-Z][a-zA-Z0-9+.-]*',
     port: '(?:0|[1-9]\\d{0,3}|[1-5]\\d{4}|6[0-4]\\d{3}|65[0-4]\\d{2}|655[0-2]\\d|6553[0-5])?',
     IP_literal: '\\[(?:{IPv6address}|{IPvFuture})\\]',
     IPv6address: '(?:(?:{h16}:){6}{ls32}|::(?:{h16}:){5}{ls32}|(?:(?:{h16})?)::(?:{h16}:){4}{ls32}|(?:(?:{h16}:)?{h16})?::(?:{h16}:){3}{ls32}|(?:(?:{h16}:){0,2}{h16})?::(?:{h16}:){2}{ls32}|(?:(?:{h16}:){0,3}{h16})?::(?:{h16}:){1}{ls32}|(?:(?:{h16}:){0,4}{h16})?::{ls32}|(?:(?:{h16}:){0,5}{h16})?::{h16}|(?:(?:{h16}:){0,6}{h16})?::)',
@@ -79,7 +80,7 @@ const iriRules = {
 };
 // scheme specific URI reg_name and IRI ireg_name
 const schemeSpecificRules = {
-    scheme: '(?:https?|wss?|file)',
+    scheme: implemented_schemes,
     reg_name: '(?:(?=.{1,255}(?:[:/?#]|$))(?:{a_label})(?:\\.{a_label})*)',
     a_label: '(?:{alpha_digit})(?:(?:{alpha_digit}|-){0,61}(?:{alpha_digit}))?',
     ireg_name: '(?:(?=.{1,255}(?:[:/?#]|$))(?:{u_label})(?:{u_separator}(?:{u_label}))*)',
@@ -113,8 +114,8 @@ const groupNames = {
     ipath_empty: 'path',
 };
 // all rules into one map
-const isSpecificScheme = (string) => new RegExp('^' + schemeSpecificRules.scheme + ':').test(string);
-const rules = (specific) => specific ? Object.assign({}, commonRules, uriRules, iriRules, schemeSpecificRules) : Object.assign({}, commonRules, uriRules, iriRules);
+const isSpecificScheme = (string) => new RegExp('^' + implemented_schemes + ':').test(string);
+const rules = (specific) => (specific ? Object.assign({}, commonRules, uriRules, iriRules, schemeSpecificRules) : Object.assign({}, commonRules, uriRules, iriRules));
 // parse (slower, it uses regex.exec and includes named capture groups)
 const parse = (string, rule) => {
     if (typeof string !== 'string') throw new TypeError(`Invalid ${rule.replace('_', '-')} type: must be a string.`);

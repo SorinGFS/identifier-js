@@ -269,6 +269,27 @@ describe('isUri with hostnames', () => {
     test('Invalid - = character (sub-delims) in file reg_name', () => {
         expect(() => id.isUri('file://exa=mple')).to.throw(Error, 'Invalid URI: file://exa=mple');
     });
+
+    test('Valid case insensitive http scheme', () => {
+        expect(id.isUri('httP://example')).to.equal(true);
+    });
+
+    test('Valid case insensitive https scheme', () => {
+        expect(id.isUri('httPs://example')).to.equal(true);
+    });
+
+    test('Valid case insensitive ws scheme', () => {
+        expect(id.isUri('WS://example')).to.equal(true);
+    });
+
+    test('Valid case insensitive wss scheme', () => {
+        expect(id.isUri('WSs://example')).to.equal(true);
+    });
+
+    test('Valid case insensitive file scheme', () => {
+        expect(id.isUri('fILE://example')).to.equal(true);
+    });
+
 });
 
 describe('isIri with hostnames', () => {
@@ -551,4 +572,25 @@ describe('isIri with hostnames', () => {
     test('Invalid - = character (sub-delims) in file reg_name', () => {
         expect(() => id.isIri('file://exa=mple')).to.throw(Error, 'Invalid IRI: file://exa=mple');
     });
+
+    test('Valid case insensitive http scheme', () => {
+        expect(id.isIri('httP://example')).to.equal(true);
+    });
+
+    test('Valid case insensitive https scheme', () => {
+        expect(id.isIri('httPs://example')).to.equal(true);
+    });
+
+    test('Valid case insensitive ws scheme', () => {
+        expect(id.isIri('WS://example')).to.equal(true);
+    });
+
+    test('Valid case insensitive wss scheme', () => {
+        expect(id.isIri('WSs://example')).to.equal(true);
+    });
+
+    test('Valid case insensitive file scheme', () => {
+        expect(id.isIri('fILE://example')).to.equal(true);
+    });
+
 });
