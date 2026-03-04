@@ -46,6 +46,10 @@ describe('isUri with hostnames', () => {
         expect(id.isUri('uri://exa=mple')).to.equal(true);
     });
 
+    test('Valid character - (unreserved) anywhere in uri reg_name', () => {
+        expect(id.isUri('iri://-exa-mple-')).to.equal(true);
+    });
+
     test('Valid character . multiple times (unreserved) in uri reg_name', () => {
         expect(id.isUri('uri://exa..mple')).to.equal(true);
     });
@@ -335,6 +339,10 @@ describe('isIri with hostnames', () => {
 
     test('Valid character = (sub-delims) in iri reg_name', () => {
         expect(id.isIri('iri://exa=mple')).to.equal(true);
+    });
+
+    test('Valid character - (unreserved) anywhere in iri reg_name', () => {
+        expect(id.isIri('iri://-exa-mple-')).to.equal(true);
     });
 
     test('Valid character . multiple times (unreserved) in iri reg_name', () => {
