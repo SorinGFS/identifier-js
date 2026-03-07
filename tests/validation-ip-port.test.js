@@ -101,6 +101,14 @@ describe('isUri – IPv6 host validation', () => {
     test('Invalid IPv6 – empty address literal', () => {
         expect(() => id.isUri('https://[]')).to.throw(Error, 'Invalid URI: https://[]');
     });
+
+    test('Invalid IPv6 – address literal with missing opening bracket', () => {
+        expect(() => id.isUri('https://::1]')).to.throw(Error, 'Invalid URI: https://::1]');
+    });
+
+    test('Invalid IPv6 – address literal with missing closing bracket', () => {
+        expect(() => id.isUri('https://[::1')).to.throw(Error, 'Invalid URI: https://[::1');
+    });
 });
 
 describe('isIri – IPv6 host validation', () => {
@@ -183,6 +191,14 @@ describe('isIri – IPv6 host validation', () => {
     test('Invalid IPv6 – empty address literal', () => {
         expect(() => id.isIri('https://[]')).to.throw(Error, 'Invalid IRI: https://[]');
     });
+
+    test('Invalid IPv6 – address literal with missing opening bracket', () => {
+        expect(() => id.isIri('https://::1]')).to.throw(Error, 'Invalid IRI: https://::1]');
+    });
+
+    test('Invalid IPv6 – address literal with missing closing bracket', () => {
+        expect(() => id.isIri('https://[::1')).to.throw(Error, 'Invalid IRI: https://[::1');
+    });
 });
 
 describe('isUri – port validation', () => {
@@ -204,6 +220,14 @@ describe('isUri – port validation', () => {
 
     test('Invalid "space" port', () => {
         expect(() => id.isUri('https://example.com: /')).to.throw(Error, 'Invalid URI: https://example.com: /');
+    });
+
+    test('Invalid "space" before port', () => {
+        expect(() => id.isUri('https://example.com: 80/')).to.throw(Error, 'Invalid URI: https://example.com: 80/');
+    });
+
+    test('Invalid "space" after port', () => {
+        expect(() => id.isUri('https://example.com:80 /')).to.throw(Error, 'Invalid URI: https://example.com:80 /');
     });
 
     test('Invalid port char', () => {
@@ -234,6 +258,14 @@ describe('isIri – port validation', () => {
 
     test('Invalid "space" port', () => {
         expect(() => id.isIri('https://example.com: /')).to.throw(Error, 'Invalid IRI: https://example.com: /');
+    });
+
+    test('Invalid "space" before port', () => {
+        expect(() => id.isIri('https://example.com: 80/')).to.throw(Error, 'Invalid IRI: https://example.com: 80/');
+    });
+
+    test('Invalid "space" after port', () => {
+        expect(() => id.isIri('https://example.com:80 /')).to.throw(Error, 'Invalid IRI: https://example.com:80 /');
     });
 
     test('Invalid port char', () => {
