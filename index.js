@@ -140,10 +140,10 @@ const validate = (string, rule) => {
 function compose(parts = {}) {
     let result = '';
     if (parts.scheme) result += parts.scheme + ':';
-    if (parts.authority) result += '//' + parts.authority;
-    result += parts.path || '';
-    if (parts.query) result += '?' + parts.query;
-    if (parts.fragment) result += '#' + parts.fragment;
+    if (parts.authority !== undefined && parts.authority !== null) result += '//' + parts.authority;
+    result += parts.path ?? '';
+    if (parts.query !== undefined && parts.query !== null) result += '?' + parts.query;
+    if (parts.fragment !== undefined && parts.fragment !== null) result += '#' + parts.fragment;
     return result;
 }
 // remove dot segments algorithm per RFC 3986 Section 5.2.4 (loop and replace)
@@ -251,21 +251,40 @@ const toRelativeReference = (target, base) => {
     if (T.scheme !== B.scheme || T.authority !== B.authority) return target;
     let result;
     if (B.path === T.path) {
-        result = '';
+        if (T.query === undefined && B.query !== undefined) {
+            // Use an explicit path to prevent the base query from being inherited.
+            if (T.path.startsWith('/')) result = T.path;
+            else if (T.path) {
+                const segment = T.path.slice(T.path.lastIndexOf('/') + 1);
+                result = segment && !segment.includes(':') ? segment : `./${segment}`;
+            } else if (T.authority !== undefined) result = `//${T.authority}`;
+            else return target;
+        } else result = '';
+    } else if (!T.path) {
+        // A network-path reference is required to represent an empty path without inheritance.
+        if (T.authority !== undefined) result = `//${T.authority}`;
+        else return target;
     } else {
         const baseSegments = B.path.split('/');
         const targetSegments = T.path.split('/');
         let position = 0;
+        // Find the common path prefix before constructing the relative traversal.
         while (baseSegments[position] === targetSegments[position] && position < baseSegments.length - 1 && position < targetSegments.length - 1) {
             position++;
         }
         const segments = [];
+        // Backtrack from the base resource to the common path prefix.
         for (let index = position + 1; index < baseSegments.length; index++) segments.push('..');
+        // Append the target path after the common prefix.
         for (let index = position; index < targetSegments.length; index++) segments.push(targetSegments[index]);
         result = segments.join('/');
+        if (!result) result = T.path.startsWith('/') ? T.path : './';
+        else if (/^[^/]*:/.test(result)) result = './' + result;
     }
     if (T.query !== undefined) result += `?${T.query}`;
     if (T.fragment !== undefined) result += `#${T.fragment}`;
+    // Parent traversal would convert a rootless path into an absolute path during resolution.
+    if (T.authority === undefined && !T.path.startsWith('/') && result.startsWith('..')) return target;
     return result;
 };
 // export

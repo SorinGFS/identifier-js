@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import id from '../index.js';
 
+// Verify relative-reference generation and round trips through reference resolution.
 describe('toRelativeReference IRI', () => {
     test.each([
         ['https://examplé.com/var/lib', 'https://examplé.com', '/var/lib'],
@@ -46,5 +47,27 @@ describe('toRelativeReference URI', () => {
         const relative = id.toRelativeReference(target, base);
         expect(relative).to.equal(expected);
         expect(id.resolveReference(relative, base)).to.equal(target); // sanity check
+    });
+});
+
+// Verify empty components and path forms that require explicit inheritance control.
+describe('toRelativeReference component presence', () => {
+    // Require every generated reference to have the expected form and resolve back to its target.
+    test.each([
+        ['clears a query on the same absolute path', 'https://example.com/a/item', 'https://example.com/a/item?old', '/a/item'],
+        ['preserves an empty target query', 'https://example.com/a/item?', 'https://example.com/a/item?old', '?'],
+        ['preserves an empty target fragment', 'https://example.com/a/item#', 'https://example.com/a/item', '#'],
+        ['clears a query on an empty path', 'https://example.com', 'https://example.com?old', '//example.com'],
+        ['clears a query on a colon-containing rootless path', 'urn:a:b', 'urn:a:b?old', './a:b'],
+        ['produces an empty path from a non-empty base path', 'https://example.com', 'https://example.com/a', '//example.com'],
+        ['produces a root path from a single-segment base path', 'https://example.com/', 'https://example.com/a', '/'],
+        ['preserves a trailing slash on a rootless directory', 'urn:a/', 'urn:a/b', './'],
+        ['protects a colon-containing first path segment', 'urn:a:b', 'urn:c', './a:b'],
+        ['falls back for an empty rootless target path', 'urn:', 'urn:a', 'urn:'],
+        ['falls back when rootless parent traversal changes path form', 'urn:a', 'urn:a/', 'urn:a'],
+    ])('%s', (description, target, base, expected) => {
+        const relative = id.toRelativeReference(target, base);
+        expect(relative).to.equal(expected);
+        expect(id.resolveReference(relative, base)).to.equal(target);
     });
 });
