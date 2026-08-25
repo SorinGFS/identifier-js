@@ -29,10 +29,10 @@
   "main": "index.js",
   "scripts": {
     "update-deps": "npx npm-check-updates -u && npm install",
-    "test": "node tests/vitest-setup && npm test"
+    "test": "node \"#/public/tests/vitest-setup.js\" && npm test"
   },
   "dependencies": {
-    "url-templates": "^1.0.5"
+    "url-templates": "^1.0.7"
   },
   "engines": {
     "node": ">=18.0.0"

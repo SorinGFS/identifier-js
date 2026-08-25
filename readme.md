@@ -429,11 +429,41 @@ RFC 9562 lists database keys, filenames, system identifiers, and transaction ide
 
 </details>
 
-## Qualification
+## Tests
 
 The current suite contains 418 active tests covering URI/IRI validation and parsing, scheme-specific hosts, IPv4, IPv6, ports, UUIDs, RFC 3986 resolution examples, empty components, absolute conversion, and relative-reference round trips.
 
 The reference-conversion changes were additionally checked against 2,646 combinations of paths, absent/empty/non-empty queries, and absent/empty/non-empty fragments.
+
+<details>
+<summary><strong>Tests</strong></summary>
+
+The test suite and supporting ABNF source documents are maintained separately as public workspace data, so they are not included in the package or canonical repository. Users and contributors who need them can materialize them into a cloned repository with [gh-workspace-data](https://github.com/SorinGFS/gh-workspace-data).
+
+Install the GitHub CLI extension once:
+
+```sh
+gh extension install SorinGFS/gh-workspace-data
+```
+
+Then run the workspace-data commands from the repository:
+
+```sh
+gh workspace-data init
+gh workspace-data load
+```
+
+The tests are materialized as ordinary local files under `#/public/tests/`, and the supporting documents are available under `#/public/docs/`. Both remain excluded from the canonical Git repository.
+
+Run the materialized suite with:
+
+```sh
+npm test
+```
+
+When Vitest is not yet declared, the first run installs it and replaces the one-time bootstrap command with the materialized test runner. Later runs invoke that runner directly.
+
+</details>
 
 ## Authoritative references
 
