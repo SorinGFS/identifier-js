@@ -429,26 +429,12 @@ RFC 9562 lists database keys, filenames, system identifiers, and transaction ide
 
 </details>
 
-## Tests
+## Verification
 
-The current suite contains 3,064 active tests covering URI/IRI validation and parsing, scheme-specific hosts, IPv4, IPv6, ports, UUIDs, RFC 3986 resolution examples, empty components, absolute conversion, and relative-reference round trips.
-
-The active reference-conversion suite includes 2,646 generated combinations of target/base paths, absent/empty/non-empty target and base queries, and absent/empty/non-empty target fragments across equivalent URI and IRI families.
-
-Continuous integration materializes the public test suite and runs it on Node.js 24 and 26 across Ubuntu, Windows, and macOS. The deterministic, single-command layout is designed to remain portable across projects, local environments, and CI runner matrices.
+Tests, benchmarks, and supporting ABNF documents are maintained in [SorinGFS/public-data](https://github.com/SorinGFS/public-data) rather than in the package or canonical repository. The [gh-workspace-data](https://github.com/SorinGFS/gh-workspace-data) extension materializes those concerns together with the shared `#/version-layers.js` runtime required by both dispatchers.
 
 <details>
-<summary><strong>Tests</strong></summary>
-
-The test suite and supporting ABNF source documents are maintained separately as public workspace data, so they are not included in the package or canonical repository. Users and contributors who need them can materialize them into a cloned repository with [gh-workspace-data](https://github.com/SorinGFS/gh-workspace-data).
-
-Install the project development dependencies:
-
-```sh
-npm install
-```
-
-The suite uses the `node:test` module built into Node.js and does not require a separate test-runner dependency.
+<summary><strong>gh-workspace-data usage</strong></summary>
 
 Install the GitHub CLI extension once:
 
@@ -456,36 +442,67 @@ Install the GitHub CLI extension once:
 gh extension install SorinGFS/gh-workspace-data
 ```
 
-Then run the workspace-data commands from the repository:
+Initialize and load workspace data from the cloned project repository:
 
 ```sh
 gh workspace-data init
 gh workspace-data load
 ```
 
-The tests are materialized as ordinary local files under `#/public/tests/`, and the supporting documents are available under `#/public/docs/`. Both remain excluded from the canonical Git repository. The materialized `#/public/tests/README.md` documents fixture discovery, version layers, ordering, callback configuration, and suite entry points.
+The extension materializes ordinary local files under `#/public/tests/`, `#/public/benchmarks/`, and `#/public/docs/`, while `#/version-layers.js` provides common deterministic version-layer discovery. The generated `#/` namespace remains excluded from the canonical Git repository and npm package.
 
-Run the materialized suite:
-
-```sh
-npm test
-```
-
-`npm test` exits unsuccessfully when any discovered test, hook, or test-module import fails.
+Run `gh workspace-data load` again to refresh materialized data after public-data changes or an extension upgrade.
 
 </details>
 
-## Benchmarks
+### Tests
 
-The materialized public workspace data also provides portable, version-aware benchmarks under `#/public/benchmarks/`. Each exported function has an independent concern entry point, while the shared harness measures fresh-process first calls and warmed steady-state behavior.
+The active suite contains 3,064 tests covering URI/IRI validation and parsing, scheme-specific hosts, IPv4, IPv6, ports, UUIDs, RFC 3986 resolution examples, empty components, absolute conversion, and relative-reference round trips, including 2,646 generated combinations of target/base paths, query-presence states, and target-fragment states across equivalent URI and IRI families.
 
-Run the complete workload:
+<details>
+<summary><strong>Test details</strong></summary>
+
+Install package dependencies and run the materialized suite:
+
+```sh
+npm install
+npm test
+```
+
+The suite uses the `node:test` module built into Node.js and requires no separate test-runner dependency. Its deterministic dispatcher processes eligible version layers, numeric fixtures, and explicit concern entry points in defined order. The materialized `#/public/tests/README.md` documents fixture discovery, version eligibility, ordering, callback configuration, and suite registration.
+
+`npm test` exits unsuccessfully when configuration, fixture loading, suite registration, or a test fails. Continuous integration runs the suite on Node.js 24 and 26 across Ubuntu, Windows, and macOS.
+
+</details>
+
+### Benchmarks
+
+The materialized benchmark suite provides portable, version-aware measurements for every exported function plus isolated package loading, reporting initial-call behavior, warmed latency statistics, integer throughput, workload counts, representative inputs, and environment metadata.
+
+<details>
+<summary><strong>Benchmark details</strong></summary>
+
+Run the standard workload:
 
 ```sh
 npm run benchmark
 ```
 
-Use `node ./#/public/benchmarks --quick --json` for a reduced CI smoke workload and machine-readable artifact. The materialized `#/public/benchmarks/README.md` documents concern registration, version layers, workload controls, measurement semantics, and guidance for interpreting noisy CI results.
+Run a reduced workload with machine-readable output for CI smoke checks or artifacts:
+
+```sh
+node ./#/public/benchmarks --quick --json
+```
+
+Direct invocation also supports an explicit iteration count; `npm run benchmark` retains the standard 100,000 iterations per sample:
+
+```sh
+node ./#/public/benchmarks --iterations 250000
+```
+
+The materialized `#/public/benchmarks/README.md` documents concern registration, version eligibility, workload controls, measurement semantics, output fields, and guidance for interpreting results from noisy CI runners. Benchmark values are observations rather than correctness assertions.
+
+</details>
 
 ## Authoritative references
 
