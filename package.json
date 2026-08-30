@@ -29,13 +29,16 @@
   "main": "index.js",
   "scripts": {
     "update-deps": "npx npm-check-updates -u && npm install",
-    "test": "node \"#/public/tests/vitest-setup.js\" && npm test"
+    "test": "node \"#/public/tests/vitest-run.js\""
   },
   "dependencies": {
     "url-templates": "^1.0.7"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   },
-  "engineStrict": true
+  "engineStrict": true,
+  "devDependencies": {
+    "vitest": "^4.1.11"
+  }
 }

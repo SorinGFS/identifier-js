@@ -17,7 +17,7 @@ description: An RFC 3986 and RFC 3987 parser, validator, and reference resolver 
 - UUID and UUIDv4 lexical validation;
 - lazily compiled and cached regular expressions.
 
-The package is synchronous, CommonJS, and supports Node.js 18 or newer. Browser use requires a bundler or runtime that supports CommonJS dependencies and Unicode regular expressions.
+The package is synchronous, CommonJS, and supports Node.js 20 or newer. Browser use requires a bundler or runtime that supports CommonJS dependencies and Unicode regular expressions.
 
 ## Install
 
@@ -435,10 +435,20 @@ The current suite contains 418 active tests covering URI/IRI validation and pars
 
 The reference-conversion changes were additionally checked against 2,646 combinations of paths, absent/empty/non-empty queries, and absent/empty/non-empty fragments.
 
+Continuous integration materializes the public test suite and runs it on Node.js 20, 22, and 24 across Ubuntu, Windows, and macOS.
+
 <details>
 <summary><strong>Tests</strong></summary>
 
 The test suite and supporting ABNF source documents are maintained separately as public workspace data, so they are not included in the package or canonical repository. Users and contributors who need them can materialize them into a cloned repository with [gh-workspace-data](https://github.com/SorinGFS/gh-workspace-data).
+
+Install the project development dependencies:
+
+```sh
+npm install
+```
+
+Vitest is a development dependency and is not installed for consumers of the published library.
 
 Install the GitHub CLI extension once:
 
@@ -455,13 +465,13 @@ gh workspace-data load
 
 The tests are materialized as ordinary local files under `#/public/tests/`, and the supporting documents are available under `#/public/docs/`. Both remain excluded from the canonical Git repository.
 
-Run the materialized suite with:
+Run the materialized suite:
 
 ```sh
 npm test
 ```
 
-When Vitest is not yet declared, the first run installs it and replaces the one-time bootstrap command with the materialized test runner. Later runs invoke that runner directly.
+`npm test` exits unsuccessfully when any discovered test, hook, or test-module import fails.
 
 </details>
 
