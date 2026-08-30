@@ -17,7 +17,7 @@ description: An RFC 3986 and RFC 3987 parser, validator, and reference resolver 
 - UUID and UUIDv4 lexical validation;
 - lazily compiled and cached regular expressions.
 
-The package is synchronous, CommonJS, and supports Node.js 20 or newer. Browser use requires a bundler or runtime that supports CommonJS dependencies and Unicode regular expressions.
+The package is synchronous, CommonJS, and supports Node.js 24 or newer. Browser use requires bundling; target browsers must support Unicode regular expressions and duplicate named capture groups in mutually exclusive alternatives. This includes Chrome and Edge 125+, Firefox 129+, Safari 17+, and corresponding newer releases.
 
 ## Install
 
@@ -435,7 +435,7 @@ The current suite contains 418 active tests covering URI/IRI validation and pars
 
 The reference-conversion changes were additionally checked against 2,646 combinations of paths, absent/empty/non-empty queries, and absent/empty/non-empty fragments.
 
-Continuous integration materializes the public test suite and runs it on Node.js 20, 22, and 24 across Ubuntu, Windows, and macOS.
+Continuous integration materializes the public test suite and runs it on Node.js 24 and 26 across Ubuntu, Windows, and macOS.
 
 <details>
 <summary><strong>Tests</strong></summary>

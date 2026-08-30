@@ -1,6 +1,6 @@
 {
   "name": "identifier-js",
-  "version": "0.0.16",
+  "version": "0.1.0",
   "description": "A RFC3986 / RFC3987 compliant fast parser/validator/resolver/composer for NodeJS and browser.",
   "keywords": [
     "IRI",
@@ -35,7 +35,7 @@
     "url-templates": "^1.0.7"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=24.0.0"
   },
   "engineStrict": true,
   "devDependencies": {
