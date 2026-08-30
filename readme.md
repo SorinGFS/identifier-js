@@ -431,11 +431,11 @@ RFC 9562 lists database keys, filenames, system identifiers, and transaction ide
 
 ## Tests
 
-The current suite contains 418 active tests covering URI/IRI validation and parsing, scheme-specific hosts, IPv4, IPv6, ports, UUIDs, RFC 3986 resolution examples, empty components, absolute conversion, and relative-reference round trips.
+The current suite contains 3,064 active tests covering URI/IRI validation and parsing, scheme-specific hosts, IPv4, IPv6, ports, UUIDs, RFC 3986 resolution examples, empty components, absolute conversion, and relative-reference round trips.
 
-The reference-conversion changes were additionally checked against 2,646 combinations of paths, absent/empty/non-empty queries, and absent/empty/non-empty fragments.
+The active reference-conversion suite includes 2,646 generated combinations of target/base paths, absent/empty/non-empty target and base queries, and absent/empty/non-empty target fragments across equivalent URI and IRI families.
 
-Continuous integration materializes the public test suite and runs it on Node.js 24 and 26 across Ubuntu, Windows, and macOS.
+Continuous integration materializes the public test suite and runs it on Node.js 24 and 26 across Ubuntu, Windows, and macOS. The deterministic, single-command layout is designed to remain portable across projects, local environments, and CI runner matrices.
 
 <details>
 <summary><strong>Tests</strong></summary>
@@ -448,7 +448,7 @@ Install the project development dependencies:
 npm install
 ```
 
-Vitest is a development dependency and is not installed for consumers of the published library.
+The suite uses the `node:test` module built into Node.js and does not require a separate test-runner dependency.
 
 Install the GitHub CLI extension once:
 
@@ -463,7 +463,7 @@ gh workspace-data init
 gh workspace-data load
 ```
 
-The tests are materialized as ordinary local files under `#/public/tests/`, and the supporting documents are available under `#/public/docs/`. Both remain excluded from the canonical Git repository.
+The tests are materialized as ordinary local files under `#/public/tests/`, and the supporting documents are available under `#/public/docs/`. Both remain excluded from the canonical Git repository. The materialized `#/public/tests/README.md` documents fixture discovery, version layers, ordering, callback configuration, and suite entry points.
 
 Run the materialized suite:
 
@@ -474,6 +474,18 @@ npm test
 `npm test` exits unsuccessfully when any discovered test, hook, or test-module import fails.
 
 </details>
+
+## Benchmarks
+
+The materialized public workspace data also provides portable, version-aware benchmarks under `#/public/benchmarks/`. Each exported function has an independent concern entry point, while the shared harness measures fresh-process first calls and warmed steady-state behavior.
+
+Run the complete workload:
+
+```sh
+npm run benchmark
+```
+
+Use `node ./#/public/benchmarks --quick --json` for a reduced CI smoke workload and machine-readable artifact. The materialized `#/public/benchmarks/README.md` documents concern registration, version layers, workload controls, measurement semantics, and guidance for interpreting noisy CI results.
 
 ## Authoritative references
 

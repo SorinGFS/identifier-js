@@ -1,6 +1,6 @@
 {
   "name": "identifier-js",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A RFC3986 / RFC3987 compliant fast parser/validator/resolver/composer for NodeJS and browser.",
   "keywords": [
     "IRI",
@@ -29,7 +29,8 @@
   "main": "index.js",
   "scripts": {
     "update-deps": "npx npm-check-updates -u && npm install",
-    "test": "node \"#/public/tests/vitest-run.js\""
+    "test": "node ./#/public/tests",
+    "benchmark": "node ./#/public/benchmarks"
   },
   "dependencies": {
     "url-templates": "^1.0.7"
@@ -37,8 +38,5 @@
   "engines": {
     "node": ">=24.0.0"
   },
-  "engineStrict": true,
-  "devDependencies": {
-    "vitest": "^4.1.11"
-  }
+  "engineStrict": true
 }
