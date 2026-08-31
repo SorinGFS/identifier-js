@@ -469,7 +469,7 @@ npm install
 npm test
 ```
 
-The suite uses the `node:test` module built into Node.js and requires no separate test-runner dependency. Its deterministic dispatcher processes eligible version layers, numeric fixtures, and explicit concern entry points in defined order. The materialized `#/public/tests/README.md` documents fixture discovery, version eligibility, ordering, callback configuration, and suite registration.
+The suite uses the `node:test` module built into Node.js and requires no separate test-runner dependency. Its deterministic dispatcher delegates version-layer selection, numbered-fixture traversal, and explicit concern discovery to the `gh-workspace-data v0.5.0` runtime. The materialized `#/public/tests/README.md` documents fixture discovery, version eligibility, ordering, callback configuration, and suite registration.
 
 `npm test` exits unsuccessfully when configuration, fixture loading, suite registration, or a test fails. Continuous integration runs the suite on Node.js 24 and 26 across Ubuntu, Windows, and macOS.
 
@@ -500,7 +500,7 @@ Direct invocation also supports an explicit iteration count; `npm run benchmark`
 node ./#/public/benchmarks --iterations 250000
 ```
 
-The materialized `#/public/benchmarks/README.md` documents concern registration, version eligibility, workload controls, measurement semantics, output fields, and guidance for interpreting results from noisy CI runners. Benchmark values are observations rather than correctness assertions.
+The generic coordinator delegates version-layer selection and ordered concern discovery to the `gh-workspace-data v0.5.0` runtime. The materialized `#/public/benchmarks/README.md` documents concern registration, version eligibility, workload controls, measurement semantics, output fields, and guidance for interpreting results from noisy CI runners. Benchmark values are observations rather than correctness assertions.
 
 </details>
 
