@@ -2,18 +2,19 @@
 
 title: Identifier JS
 
-description: An RFC 3986 and RFC 3987 parser, validator, and reference resolver for Node.js and browser bundles.
+description: An RFC 3986 and RFC 3987 parser, validator, normalizer, and reference resolver for Node.js and browser bundles.
 
 ---
 
 # Identifier JS
 
-`identifier-js` is a fully RFC [3986](https://www.rfc-editor.org/rfc/rfc3986) and RFC [3987](https://www.rfc-editor.org/rfc/rfc3987) compliant URI/IRI parser, validator, resolver, and composer. It provides:
+`identifier-js` is a URI/IRI parser, validator, normalizer, resolver, and composer based on RFC [3986](https://www.rfc-editor.org/rfc/rfc3986) and RFC [3987](https://www.rfc-editor.org/rfc/rfc3987). Its recognized HTTP, WebSocket, and `file` schemes retain the documented hostname-policy restrictions below. It provides:
 
 - URI and IRI validation;
 - parsed identifier components;
+- conservative syntax normalization, recognized-scheme port/path forms, and a registered-name extension point;
 - RFC 3986 reference resolution and dot-segment removal;
-- relative-reference generation with round-trip guarantees for supported forms;
+- relative-reference generation with resolution round-trip guarantees for supported forms;
 - UUID and UUIDv4 lexical validation;
 - lazily compiled and cached regular expressions.
 
@@ -62,9 +63,9 @@ Parse URI syntax into scheme, authority, userinfo, host, port, path, query, and 
 <summary><strong>API and examples</strong></summary>
 
 ```ts
-parseUri(value: string): IdentifierComponents
-parseUriReference(value: string): RelativeIdentifierComponents
-parseAbsoluteUri(value: string): AbsoluteIdentifierComponents
+parseUri(value: string): ParsedIdentifierComponents
+parseUriReference(value: string): ParsedRelativeIdentifierComponents
+parseAbsoluteUri(value: string): ParsedAbsoluteIdentifierComponents
 ```
 
 ```js
@@ -107,7 +108,7 @@ console.log(isIri('https://例え.テスト/資料?項目=値#概要')); // true
 console.log(isIriReference('../résumé')); // true
 ```
 
-IRI support permits RFC 3987 Unicode ranges in applicable components. Complete IDNA processing and conversion to a transport URI are separate responsibilities.
+IRI support permits the RFC 3987 Unicode ranges in applicable components and preserves their parsed Unicode spelling.
 
 </details>
 
@@ -119,9 +120,9 @@ Parse an IRI while preserving its Unicode component values.
 <summary><strong>API and examples</strong></summary>
 
 ```ts
-parseIri(value: string): IdentifierComponents
-parseIriReference(value: string): RelativeIdentifierComponents
-parseAbsoluteIri(value: string): AbsoluteIdentifierComponents
+parseIri(value: string): ParsedIdentifierComponents
+parseIriReference(value: string): ParsedRelativeIdentifierComponents
+parseAbsoluteIri(value: string): ParsedAbsoluteIdentifierComponents
 ```
 
 ```js
@@ -190,7 +191,7 @@ toRelativeReference(target: string, base: string): string
 const { toAbsoluteReference, toRelativeReference } = require('identifier-js');
 
 console.log(toAbsoluteReference('https://example.com/a/../b#section'));
-// https://example.com/b
+// https://example.com/a/../b
 
 const target = 'https://example.com/docs/images/logo.svg';
 const base = 'https://example.com/docs/api/page';
@@ -198,29 +199,49 @@ const relative = toRelativeReference(target, base);
 console.log(relative); // ../images/logo.svg
 ```
 
-When no safe rootless relative form can round-trip to the target, `toRelativeReference` returns the absolute target. Different schemes or authorities also return the target unchanged.
+When no safe rootless relative form can round-trip to the target, `toRelativeReference` returns the absolute target. Different schemes or authorities also return the target unchanged. Complete dot segments in either path also trigger this fallback because RFC resolution removes them. For those inputs, resolving the result produces the same identifier as resolving the target directly; lexical dot-segment spelling is not preserved.
 
 </details>
 
-### Normalization status
+### Normalize parsed URI and IRI references
 
-`normalizeReference` is reserved for future normalization policy and currently returns its input unchanged.
+Every URI and IRI parse result provides an optional, non-enumerable `normalize()` method. Parsing remains usable by itself; normalization runs only when the method is called and returns a string without modifying the parsed components.
 
 <details>
-<summary><strong>Current behavior and research</strong></summary>
+<summary><strong>API, behavior, and examples</strong></summary>
 
 ```ts
-normalizeReference(reference: string): string
+type RegNameMapper = (regName: string) => string
+
+type NormalizeOptions = {
+    toUri?: boolean
+    mapRegName?: RegNameMapper
+}
+
+interface NormalizableReference {
+    normalize(options?: NormalizeOptions): string
+}
 ```
 
 ```js
-const { normalizeReference } = require('identifier-js');
+const { parseIriReference } = require('identifier-js');
 
-console.log(normalizeReference('HTTP://Example.COM/a/../b'));
-// HTTP://Example.COM/a/../b
+const parsed = parseIriReference('HTTP://Example.COM/%7e/a/../b?x=%2f#%41');
+console.log(parsed.host); // Example.COM
+console.log(parsed.normalize());
+// http://example.com/~/b?x=%2F#A
+console.log(parsed.path); // /%7e/a/../b
 ```
 
-URI/IRI normalization has multiple standards-defined levels and scheme-specific tradeoffs. See [`normalization.md`](normalization.md) for implementation options, unsafe transformations, suggested profiles, and acceptance scenarios.
+The method is available from `parseUri`, `parseUriReference`, `parseAbsoluteUri`, `parseIri`, `parseIriReference`, and `parseAbsoluteIri`.
+
+Normalization implements RFC 3986 and RFC 3987 syntax normalization for scheme and host case, percent triplets, ASCII unreserved characters, path dot segments, and component recomposition. IPv6 literals use RFC 5952 text. HTTP(S) default ports and empty paths follow RFC 9110; WS(S) defaults and resource-name paths follow RFC 6455.
+
+For a non-empty registered-name host, `mapRegName` receives the current host spelling before built-in normalization. The mapper exclusively owns validation, representation, and host-kind policy for its returned string. Apart from enforcing the declared string return type, this package does not check whether mapper output is non-empty, remains a registered name, introduces delimiters, resembles an IP address, or satisfies a scheme-specific hostname grammar.
+
+With `toUri: true`, non-ASCII userinfo, mapper output, path, query, and fragment text becomes uppercase UTF-8 percent triplets under RFC 3987 §3.1. A mapper can supply an ASCII hostname when its consuming scheme requires one; this package does not enforce that requirement or validate the complete normalized result.
+
+See [`normalization.md`](normalization.md) for the exact RFC section mapping and examples.
 
 </details>
 
@@ -243,7 +264,7 @@ console.log(isUUID('99c17cbb-656f-564a-940f-1a4568f03487')); // true
 console.log(isUUIDv4('123e4567-e89b-42d3-9456-426614174000')); // true
 ```
 
-`isUUID` validates the `8-4-4-4-12` hexadecimal layout without restricting the version or variant fields. `isUUIDv4` requires version `4` and the RFC variant nibble `8`, `9`, `a`, or `b`.
+`isUUID` validates the `8-4-4-4-12` hexadecimal layout. `isUUIDv4` additionally requires version `4` and the RFC variant nibble `8`, `9`, `a`, or `b`.
 
 </details>
 
@@ -279,9 +300,9 @@ The following schemes trigger DNS-style ASCII or Unicode label rules instead of 
 - `wss`
 - `file`
 
-Matching is case-insensitive. Other valid schemes use generic RFC 3986/3987 registered-name syntax.
+Matching is case-insensitive. Other valid schemes use generic RFC 3986/3987 registered-name syntax. RFC 8089's empty `file` authority is accepted when followed by an absolute path, as in `file:///path`; empty hosts remain rejected for HTTP and WebSocket schemes.
 
-This policy validates label shape and selected Unicode character classes. It is not complete IDNA processing and does not replace normalization, contextual, bidi, registry, or Punycode validation.
+Parsing validates DNS-style label shape and the selected RFC 3987 Unicode character classes. A registered-name mapper runs later during optional normalization, and its returned string is not submitted to this hostname policy again.
 
 </details>
 
@@ -349,7 +370,7 @@ RFC 3987 uses IRIs for internationalized identification while requiring mapping 
 
 ### Validate and route protocol identifiers
 
-Component parsing supports policy decisions without unsafe string splitting.
+Component parsing provides scheme, authority, host, port, path, and query fields for policy decisions.
 
 <details>
 <summary><strong>Example and context</strong></summary>
@@ -364,7 +385,7 @@ console.log(parts.port);   // 8443
 console.log(parts.path);   // /events
 ```
 
-Applications can inspect scheme, authority, path, and query before selecting a connector, enforcing an allowlist, constructing an HTTP request target, or routing to a service. Protocol-specific security and semantic validation remains the application's responsibility.
+Applications can inspect scheme, authority, path, and query before selecting a connector, enforcing an allowlist, constructing an HTTP request target, or routing to a service.
 
 </details>
 
@@ -386,46 +407,41 @@ try {
 }
 ```
 
-RFC 9562 lists database keys, filenames, system identifiers, and transaction identifiers among common UUID uses. UUID validation does not establish authorization, unpredictability, uniqueness, or safe use as a capability token.
+RFC 9562 lists database keys, filenames, system identifiers, and transaction identifiers among common UUID uses.
 
 </details>
 
-## Intentional behavior and limitations
+## Standards behavior
 
 <details>
-<summary><strong>Validation and parsing boundaries</strong></summary>
+<summary><strong>Validation and parsing</strong></summary>
 
-- Validators return `true` or throw; they do not return `false`.
-- URI functions reject non-ASCII characters where RFC 3986 permits only URI syntax. Use the IRI functions for RFC 3987 Unicode ranges.
-- `absolute-URI` and `absolute-IRI` exclude fragments by definition. The complete `URI` and `IRI` functions permit fragments.
-- Scheme-specific processing currently specializes hostname syntax; it does not implement every protocol rule for HTTP, WebSocket, or `file` identifiers.
-- Scheme-specific Unicode labels are not complete IDNA validation.
-- Ports are restricted to an empty value or the numeric range 0–65535. Generic RFC 3986 syntax itself permits any sequence of digits.
-- Generic registered names may contain syntax that DNS-style hostnames reject.
-- Parsing separates components before any application-level percent decoding.
-- The library does not perform network, DNS, filesystem, registry, or authorization checks.
+- Generic URI syntax follows RFC 3986 character and component grammar; recognized schemes select the documented hostname profile.
+- Generic IRI syntax follows the RFC 3987 Unicode extensions to URI grammar; recognized schemes select the documented hostname profile.
+- Validators return `true` or throw at the first grammar violation.
+- `absolute-URI` and `absolute-IRI` use the fragment-free grammar defined by their RFCs; complete URI and IRI operations accept fragments.
+- Port syntax follows RFC 3986 `port = *DIGIT`, including empty and leading-zero values.
+- Parsing records absent optional components as `undefined` and present-empty components as empty strings.
 
 </details>
 
 <details>
-<summary><strong>Resolution and conversion boundaries</strong></summary>
+<summary><strong>Resolution, conversion, and normalization</strong></summary>
 
-- Resolution uses IRI grammar, so Unicode references and bases are accepted.
-- Empty authorities, queries, and fragments remain distinct from absent components.
-- `strict = false` enables RFC 3986 backward-compatible handling when a reference repeats the base scheme.
-- `toAbsoluteReference` requires an identifier containing a scheme and removes its fragment through empty-reference resolution.
-- `toRelativeReference` compares scheme and authority text exactly; it does not normalize them first.
-- `toRelativeReference` may return an absolute target when a rootless relative path cannot preserve identity.
-- `normalizeReference` is intentionally an identity function until a normalization contract is selected.
+- `resolveReference` implements RFC 3986 §5 component inheritance, path merging, dot-segment removal, and recomposition for URI and IRI text.
+- An empty reference path inherits the base path unchanged.
+- `strict = false` implements RFC 3986 §5.2.2 backward-compatible same-scheme handling.
+- `toAbsoluteReference` removes the fragment from an identifier containing a scheme.
+- `toRelativeReference` generates a reference whose RFC resolution equals the target resolution for supported forms.
+- `normalize()` implements the applicable case, percent-encoding, and path-segment rules from RFC 3986 §§6.2.2.1–6.2.2.3 and RFC 3987 §§5.3.2.1, 5.3.2.3–5.3.2.4, RFC 3987 §3.1 IRI-to-URI output, RFC 5952 IPv6 text, RFC 9110 HTTP(S) port/path forms, and RFC 6455 WS(S) port/resource-name forms.
 
 </details>
 
 <details>
-<summary><strong>UUID boundaries</strong></summary>
+<summary><strong>UUID validation</strong></summary>
 
-- `isUUID` validates canonical hexadecimal layout only; it does not enforce a known version or the RFC variant.
-- `isUUIDv4` validates the version and variant fields but does not assess random-number quality.
-- A syntactically valid UUID is not proof of uniqueness, integrity, authenticity, or authorization.
+- `isUUID` validates the RFC 9562 hexadecimal `8-4-4-4-12` text layout.
+- `isUUIDv4` additionally validates version `4` and the RFC variant bits.
 
 </details>
 
@@ -457,7 +473,7 @@ Run `gh workspace-data load` again to refresh materialized data after public-dat
 
 ### Tests
 
-The active suite contains 3,064 tests covering URI/IRI validation and parsing, scheme-specific hosts, IPv4, IPv6, ports, UUIDs, RFC 3986 resolution examples, empty components, absolute conversion, and relative-reference round trips, including 2,646 generated combinations of target/base paths, query-presence states, and target-fragment states across equivalent URI and IRI families.
+The active suite contains 3,130 tests covering URI/IRI validation, parsing, generic normalization, scheme-specific hosts, IPv4, IPv6, IPvFuture, ports, UUIDs, RFC 3986 resolution examples, empty components, absolute conversion, and relative-reference round trips, including 2,646 generated combinations of target/base paths, query-presence states, and target-fragment states across equivalent URI and IRI families.
 
 <details>
 <summary><strong>Test details</strong></summary>
@@ -500,7 +516,7 @@ Direct invocation also supports an explicit iteration count; `npm run benchmark`
 node ./#/public/benchmarks --iterations 250000
 ```
 
-The generic coordinator delegates version-layer selection and ordered concern discovery to the `gh-workspace-data v0.5.0` runtime. The materialized `#/public/benchmarks/README.md` documents concern registration, version eligibility, workload controls, measurement semantics, output fields, and guidance for interpreting results from noisy CI runners. Benchmark values are observations rather than correctness assertions.
+The generic coordinator delegates version-layer selection and ordered concern discovery to the `gh-workspace-data v0.5.0` runtime. The materialized `#/public/benchmarks/README.md` documents concern registration, version eligibility, workload controls, measurement semantics, output fields, and guidance for interpreting results from noisy CI runners.
 
 </details>
 
@@ -512,7 +528,3 @@ The generic coordinator delegates version-layer selection and ordered concern di
 - [RFC 6455 — The WebSocket Protocol](https://www.rfc-editor.org/rfc/rfc6455)
 - [RFC 8089 — The `file` URI Scheme](https://www.rfc-editor.org/rfc/rfc8089)
 - [RFC 9562 — Universally Unique IDentifiers](https://www.rfc-editor.org/rfc/rfc9562)
-
-## Disclaimer
-
-Validation establishes conformance with this implementation's syntax and policy. It does not establish that an identifier is registered, reachable, trustworthy, safe to dereference, or appropriate for a particular protocol operation.

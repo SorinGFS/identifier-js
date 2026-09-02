@@ -1,7 +1,7 @@
 {
   "name": "identifier-js",
   "version": "0.1.4",
-  "description": "A RFC3986 / RFC3987 compliant fast parser/validator/resolver/composer for NodeJS and browser.",
+  "description": "A fast URI/IRI parser, validator, normalizer, resolver, and composer based on RFC 3986 and RFC 3987.",
   "keywords": [
     "IRI",
     "URI",

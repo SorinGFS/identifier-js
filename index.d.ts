@@ -1,3 +1,4 @@
+// Declare the public validation, parsing, resolution, and normalization API.
 /** @throws {Error} If the UUID is invalid. */
 export const isUUID: (string: string) => true;
 /** @throws {Error} If the UUID-v4 is invalid. */
@@ -11,11 +12,11 @@ export const isUriReference: (uriReference: string) => true;
 export const isAbsoluteUri: (uri: string) => true;
 
 /** @throws {Error} If the URI is invalid. */
-export const parseUri: (uri: string) => IdentifierComponents;
+export const parseUri: (uri: string) => ParsedIdentifierComponents;
 /** @throws {Error} If the URI-reference is invalid. */
-export const parseUriReference: (uriReference: string) => RelativeIdentifierComponents;
+export const parseUriReference: (uriReference: string) => ParsedRelativeIdentifierComponents;
 /** @throws {Error} If the absolute-URI is invalid. */
-export const parseAbsoluteUri: (uri: string) => AbsoluteIdentifierComponents;
+export const parseAbsoluteUri: (uri: string) => ParsedAbsoluteIdentifierComponents;
 
 /** @throws {Error} If the IRI is invalid. */
 export const isIri: (iri: string) => true;
@@ -25,33 +26,47 @@ export const isIriReference: (iriReference: string) => true;
 export const isAbsoluteIri: (iri: string) => true;
 
 /** @throws {Error} If the IRI is invalid. */
-export const parseIri: (iri: string) => IdentifierComponents;
+export const parseIri: (iri: string) => ParsedIdentifierComponents;
 /** @throws {Error} If the IRI-reference is invalid. */
-export const parseIriReference: (iriReference: string) => RelativeIdentifierComponents;
+export const parseIriReference: (iriReference: string) => ParsedRelativeIdentifierComponents;
 /** @throws {Error} If the absolute-IRI is invalid. */
-export const parseAbsoluteIri: (iri: string) => AbsoluteIdentifierComponents;
-
-/** @throws {Error} If the reference is invalid. */
-export const normalizeReference: (reference: string) => string;
+export const parseAbsoluteIri: (iri: string) => ParsedAbsoluteIdentifierComponents;
 /** @throws {Error} If the base or the reference is invalid. */
-export const resolveReference: (reference: string, base: string, strict?: boolean, returnParts?: boolean) => string;
+export function resolveReference(reference: string, base: string, strict?: boolean, returnParts?: false): string;
+export function resolveReference(reference: string, base: string, strict: boolean | undefined, returnParts: true): IdentifierComponents;
+export function resolveReference(reference: string, base: string, strict: boolean | undefined, returnParts: boolean | undefined): string | IdentifierComponents;
 /** @throws {Error} If the reference is invalid. */
 export const toAbsoluteReference: (reference: string) => string;
 /** @throws {Error} If the base or the reference is invalid. */
 export const toRelativeReference: (target: string, base: string) => string;
 
-type IdentifierComponents = {
+/** Map a parsed non-empty registered-name host to caller-owned text. */
+export type RegNameMapper = (regName: string) => string;
+
+/** Select optional URI output and registered-name mapping for parsed-result normalization. */
+export type NormalizeOptions = {
+    toUri?: boolean;
+    mapRegName?: RegNameMapper;
+};
+
+/** Provide lazy RFC normalization and optional IRI-to-URI output on a parsed result. */
+export type NormalizableReference = {
+    normalize(options?: NormalizeOptions): string;
+};
+
+// Describe component presence for complete, relative, and fragment-free absolute identifiers.
+export type IdentifierComponents = {
     scheme: string;
-    authority: string;
+    authority?: string;
     userinfo?: string;
-    host: string;
+    host?: string;
     port?: string;
     path: string;
     query?: string;
     fragment?: string;
 };
 
-type RelativeIdentifierComponents = {
+export type RelativeIdentifierComponents = {
     scheme?: string;
     authority?: string;
     userinfo?: string;
@@ -62,12 +77,16 @@ type RelativeIdentifierComponents = {
     fragment?: string;
 };
 
-type AbsoluteIdentifierComponents = {
+export type AbsoluteIdentifierComponents = {
     scheme: string;
-    authority: string;
+    authority?: string;
     userinfo?: string;
-    host: string;
+    host?: string;
     port?: string;
     path: string;
     query?: string;
 };
+
+export type ParsedIdentifierComponents = IdentifierComponents & NormalizableReference;
+export type ParsedRelativeIdentifierComponents = RelativeIdentifierComponents & NormalizableReference;
+export type ParsedAbsoluteIdentifierComponents = AbsoluteIdentifierComponents & NormalizableReference;
