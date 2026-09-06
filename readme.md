@@ -213,8 +213,10 @@ Every URI and IRI parse result provides an optional, non-enumerable `normalize()
 ```ts
 type RegNameMapper = (regName: string) => string
 
+type NormalizeTransform = 'URI' | 'IRI'
+
 type NormalizeOptions = {
-    toUri?: boolean
+    transform?: NormalizeTransform
     mapRegName?: RegNameMapper
 }
 
@@ -239,7 +241,7 @@ Normalization implements RFC 3986 and RFC 3987 syntax normalization for scheme a
 
 For a non-empty registered-name host, `mapRegName` receives the current host spelling before built-in normalization. The mapper exclusively owns validation, representation, and host-kind policy for its returned string. Apart from enforcing the declared string return type, this package does not check whether mapper output is non-empty, remains a registered name, introduces delimiters, resembles an IP address, or satisfies a scheme-specific hostname grammar.
 
-With `toUri: true`, non-ASCII userinfo, mapper output, path, query, and fragment text becomes uppercase UTF-8 percent triplets under RFC 3987 §3.1. A mapper can supply an ASCII hostname when its consuming scheme requires one; this package does not enforce that requirement or validate the complete normalized result.
+With `transform: 'URI'`, non-ASCII userinfo, mapper output, path, query, and fragment text becomes uppercase UTF-8 percent triplets under RFC 3987 §3.1. With `transform: 'IRI'`, eligible percent-encoded ASCII unreserved characters and strictly legal UTF-8 sequences become IRI characters under RFC 3987 §3.2; reserved, malformed, disallowed, and non-UTF-8 octets remain encoded. Private-use characters are decoded only in queries, and forbidden bidirectional formatting characters remain encoded. A mapper can supply the desired Unicode or ASCII hostname representation; this package does not enforce that policy or validate the complete normalized result.
 
 See [`normalization.md`](normalization.md) for the exact RFC section mapping and examples.
 
@@ -433,7 +435,7 @@ RFC 9562 lists database keys, filenames, system identifiers, and transaction ide
 - `strict = false` implements RFC 3986 §5.2.2 backward-compatible same-scheme handling.
 - `toAbsoluteReference` removes the fragment from an identifier containing a scheme.
 - `toRelativeReference` generates a reference whose RFC resolution equals the target resolution for supported forms.
-- `normalize()` implements the applicable case, percent-encoding, and path-segment rules from RFC 3986 §§6.2.2.1–6.2.2.3 and RFC 3987 §§5.3.2.1, 5.3.2.3–5.3.2.4, RFC 3987 §3.1 IRI-to-URI output, RFC 5952 IPv6 text, RFC 9110 HTTP(S) port/path forms, and RFC 6455 WS(S) port/resource-name forms.
+- `normalize()` implements the applicable case, percent-encoding, and path-segment rules from RFC 3986 §§6.2.2.1–6.2.2.3 and RFC 3987 §§5.3.2.1, 5.3.2.3–5.3.2.4, RFC 3987 §§3.1–3.2 URI/IRI representation transformation, RFC 5952 IPv6 text, RFC 9110 HTTP(S) port/path forms, and RFC 6455 WS(S) port/resource-name forms.
 
 </details>
 
@@ -473,7 +475,7 @@ Run `gh workspace-data load` again to refresh materialized data after public-dat
 
 ### Tests
 
-The active suite contains 3,130 tests covering URI/IRI validation, parsing, generic normalization, scheme-specific hosts, IPv4, IPv6, IPvFuture, ports, UUIDs, RFC 3986 resolution examples, empty components, absolute conversion, and relative-reference round trips, including 2,646 generated combinations of target/base paths, query-presence states, and target-fragment states across equivalent URI and IRI families.
+The active suite contains 3,137 tests covering URI/IRI validation, parsing, generic normalization, bidirectional URI/IRI representation transformation, scheme-specific hosts, IPv4, IPv6, IPvFuture, ports, UUIDs, RFC 3986 resolution examples, empty components, absolute conversion, and relative-reference round trips, including 2,646 generated combinations of target/base paths, query-presence states, and target-fragment states across equivalent URI and IRI families.
 
 <details>
 <summary><strong>Test details</strong></summary>

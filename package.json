@@ -1,6 +1,6 @@
 {
   "name": "identifier-js",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A fast URI/IRI parser, validator, normalizer, resolver, and composer based on RFC 3986 and RFC 3987.",
   "keywords": [
     "IRI",

@@ -79,6 +79,12 @@ const iriRules = {
     iprivate: '[\\uE000-\\uF8FF\\u{F0000}-\\u{FFFFD}\\u{100000}-\\u{10FFFD}]',
     ucschar: '[\\xA0-\\uD7FF\\uF900-\\uFDCF\\uFDF0-\\uFFEF\\u{10000}-\\u{1FFFD}\\u{20000}-\\u{2FFFD}\\u{30000}-\\u{3FFFD}\\u{40000}-\\u{4FFFD}\\u{50000}-\\u{5FFFD}\\u{60000}-\\u{6FFFD}\\u{70000}-\\u{7FFFD}\\u{80000}-\\u{8FFFD}\\u{90000}-\\u{9FFFD}\\u{A0000}-\\u{AFFFD}\\u{B0000}-\\u{BFFFD}\\u{C0000}-\\u{CFFFD}\\u{D0000}-\\u{DFFFD}\\u{E1000}-\\u{EFFFD}]',
 };
+// Reuse the grammar repertoires when selecting URI octets safe for IRI output.
+const uriUnreservedPattern = new RegExp(`^${commonRules.unreserved}$`);
+const iriUcscharPattern = new RegExp(`^${iriRules.ucschar}$`, 'u');
+const iriPrivatePattern = new RegExp(`^${iriRules.iprivate}$`, 'u');
+// Apply the additional RFC 3987 Section 4.1 prose restriction outside the ABNF repertoire.
+const forbiddenIriFormattingPattern = /^[\u200E\u200F\u202A-\u202E]$/u;
 // scheme specific URI reg_name and IRI ireg_name
 const schemeSpecificRules = {
     scheme: implemented_schemes,
@@ -321,6 +327,10 @@ function isIPv4Address(host) {
     }
     return true;
 }
+// Identify ASCII octets through the URI grammar's canonical unreserved repertoire.
+function isAsciiUnreservedOctet(octet) {
+    return uriUnreservedPattern.test(String.fromCharCode(octet));
+}
 // Normalize percent triplets while optionally decoding only ASCII unreserved octets.
 function normalizePercentEncoding(value, decodeUnreserved = true) {
     let result = '';
@@ -332,8 +342,7 @@ function normalizePercentEncoding(value, decodeUnreserved = true) {
         }
         const hexadecimal = value.slice(index + 1, index + 3);
         const octet = Number.parseInt(hexadecimal, 16);
-        const unreserved = (octet >= 0x41 && octet <= 0x5A) || (octet >= 0x61 && octet <= 0x7A) || (octet >= 0x30 && octet <= 0x39) || octet === 0x2D || octet === 0x2E || octet === 0x5F || octet === 0x7E;
-        result += decodeUnreserved && unreserved ? String.fromCharCode(octet) : `%${hexadecimal.toUpperCase()}`;
+        result += decodeUnreserved && isAsciiUnreservedOctet(octet) ? String.fromCharCode(octet) : `%${hexadecimal.toUpperCase()}`;
         index += 2;
     }
     return result;
@@ -459,6 +468,52 @@ function encodeIriComponent(component) {
     // Process complete code points so supplementary characters produce one UTF-8 sequence.
     return component.replace(/[^\x00-\x7F]/gu, (character) => encodeURIComponent(character).toUpperCase());
 }
+// Decode the maximal RFC 3987 URI octet repertoire allowed by one IRI component.
+function decodeUriComponentToIri(component, allowPrivate = false) {
+    let result = '';
+    // Inspect each normalized percent triplet as either ASCII or the lead of one strict UTF-8 scalar.
+    for (let index = 0; index < component.length; index++) {
+        if (component[index] !== '%' || !/^[0-9A-F]{2}$/.test(component.slice(index + 1, index + 3))) {
+            result += component[index];
+            continue;
+        }
+        const hexadecimal = component.slice(index + 1, index + 3);
+        const octet = Number.parseInt(hexadecimal, 16);
+        if (octet <= 0x7F) {
+            result += isAsciiUnreservedOctet(octet) ? String.fromCharCode(octet) : `%${hexadecimal}`;
+            index += 2;
+            continue;
+        }
+        const sequenceLength = octet >= 0xC2 && octet <= 0xDF ? 2 : octet >= 0xE0 && octet <= 0xEF ? 3 : octet >= 0xF0 && octet <= 0xF4 ? 4 : 0;
+        let encoded = '';
+        // Collect exactly one candidate scalar without consuming malformed trailing input.
+        for (let sequenceIndex = 0; sequenceIndex < sequenceLength; sequenceIndex++) {
+            const position = index + sequenceIndex * 3;
+            if (component[position] !== '%' || !/^[0-9A-F]{2}$/.test(component.slice(position + 1, position + 3))) {
+                encoded = '';
+                break;
+            }
+            encoded += component.slice(position, position + 3);
+        }
+        let character;
+        if (encoded) {
+            try {
+                character = decodeURIComponent(encoded);
+            } catch {
+                character = undefined;
+            }
+        }
+        const allowed = character !== undefined && !forbiddenIriFormattingPattern.test(character) && (iriUcscharPattern.test(character) || (allowPrivate && iriPrivatePattern.test(character)));
+        if (allowed) {
+            result += character;
+            index += encoded.length - 1;
+        } else {
+            result += `%${hexadecimal}`;
+            index += 2;
+        }
+    }
+    return result;
+}
 // Rebuild authority from normalized values while preserving other empty component delimiters.
 function normalizeAuthority(parts, scheme, mapRegName) {
     if (parts.authority === undefined) return undefined;
@@ -475,8 +530,8 @@ function normalizeAuthority(parts, scheme, mapRegName) {
 function normalizeParsedReference(parts, options = {}) {
     // Validate the optional API settings before they select normalization behavior.
     if (options === null || typeof options !== 'object' || Array.isArray(options)) throw new TypeError('Invalid normalization argument type: must be an options object.');
-    const { toUri = false, mapRegName } = options;
-    if (typeof toUri !== 'boolean') throw new TypeError('Invalid toUri option type: must be a boolean.');
+    const { transform, mapRegName } = options;
+    if (transform !== undefined && transform !== 'URI' && transform !== 'IRI') throw new TypeError('Invalid transform option: must be "URI" or "IRI".');
     if (mapRegName !== undefined && typeof mapRegName !== 'function') throw new TypeError('Invalid registered-name mapper type: must be a function.');
     // Normalize each component independently so encoded delimiters cannot become structure.
     const scheme = parts.scheme === undefined ? undefined : parts.scheme.toLowerCase();
@@ -496,12 +551,20 @@ function normalizeParsedReference(parts, options = {}) {
         // Preserve a no-authority path when reduction would reparse it as an authority.
         if (normalized.authority !== undefined || !reducedPath.startsWith('//')) normalized.path = reducedPath;
     }
-    if (!toUri) return compose(normalized);
-    // Map every non-ASCII authority, path, query, and fragment scalar under RFC 3987 URI output.
-    if (normalized.authority !== undefined) normalized.authority = encodeIriComponent(normalized.authority);
-    normalized.path = encodeIriComponent(normalized.path);
-    if (normalized.query !== undefined) normalized.query = encodeIriComponent(normalized.query);
-    if (normalized.fragment !== undefined) normalized.fragment = encodeIriComponent(normalized.fragment);
+    // Select an explicit target representation only after syntax and scheme normalization is complete.
+    if (transform === 'URI') {
+        // Map every non-ASCII authority, path, query, and fragment scalar under RFC 3987 URI output.
+        if (normalized.authority !== undefined) normalized.authority = encodeIriComponent(normalized.authority);
+        normalized.path = encodeIriComponent(normalized.path);
+        if (normalized.query !== undefined) normalized.query = encodeIriComponent(normalized.query);
+        if (normalized.fragment !== undefined) normalized.fragment = encodeIriComponent(normalized.fragment);
+    } else if (transform === 'IRI') {
+        // Decode valid UTF-8 percent sequences only where the destination component permits their scalar.
+        if (normalized.authority !== undefined) normalized.authority = decodeUriComponentToIri(normalized.authority);
+        normalized.path = decodeUriComponentToIri(normalized.path);
+        if (normalized.query !== undefined) normalized.query = decodeUriComponentToIri(normalized.query, true);
+        if (normalized.fragment !== undefined) normalized.fragment = decodeUriComponentToIri(normalized.fragment);
+    }
     return compose(normalized);
 }
 // export

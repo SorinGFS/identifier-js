@@ -43,13 +43,16 @@ export const toRelativeReference: (target: string, base: string) => string;
 /** Map a parsed non-empty registered-name host to caller-owned text. */
 export type RegNameMapper = (regName: string) => string;
 
-/** Select optional URI output and registered-name mapping for parsed-result normalization. */
+/** Select a target representation after parsed-result normalization. */
+export type NormalizeTransform = 'URI' | 'IRI';
+
+/** Select optional representation transformation and registered-name mapping. */
 export type NormalizeOptions = {
-    toUri?: boolean;
+    transform?: NormalizeTransform;
     mapRegName?: RegNameMapper;
 };
 
-/** Provide lazy RFC normalization and optional IRI-to-URI output on a parsed result. */
+/** Provide lazy RFC normalization and optional URI/IRI transformation on a parsed result. */
 export type NormalizableReference = {
     normalize(options?: NormalizeOptions): string;
 };

@@ -1,14 +1,16 @@
 # URI and IRI normalization
 
-Parsed URI and IRI results expose `normalize()` for syntax-based normalization, the implemented HTTP, HTTPS, WS, and WSS scheme rules, and optional RFC 3987 IRI-to-URI output. The method returns a string and leaves the parsed components unchanged.
+Parsed URI and IRI results expose `normalize()` for syntax-based normalization, the implemented HTTP, HTTPS, WS, and WSS scheme rules, and optional RFC 3987 URI/IRI representation transformation. The method returns a string and leaves the parsed components unchanged.
 
 ## API
 
 ```ts
 type RegNameMapper = (regName: string) => string
 
+type NormalizeTransform = 'URI' | 'IRI'
+
 type NormalizeOptions = {
-    toUri?: boolean
+    transform?: NormalizeTransform
     mapRegName?: RegNameMapper
 }
 
@@ -51,7 +53,8 @@ parsed.path;
 | Path segments | Apply the RFC dot-segment algorithm where the parsed reference can be normalized independently. Preserve unresolved rootless-relative path semantics. | [RFC 3986 §§5.2.4 and 6.2.2.3](https://www.rfc-editor.org/rfc/rfc3986#section-5.2.4), [RFC 3987 §5.3.2.4](https://www.rfc-editor.org/rfc/rfc3987#section-5.3.2.4) |
 | Component recomposition | Emit authority, query, and fragment delimiters from component presence, including present-empty components. | [RFC 3986 §5.3](https://www.rfc-editor.org/rfc/rfc3986#section-5.3) |
 | IPv6 text | Suppress leading zeroes, compress the longest zero run with first-run tie breaking, and use lowercase hexadecimal. Known embedded-IPv4 forms use mixed notation. | [RFC 5952 §§4–5](https://www.rfc-editor.org/rfc/rfc5952#section-4) |
-| IRI-to-URI output | With `toUri: true`, encode non-ASCII authority, path, query, and fragment characters as uppercase UTF-8 percent triplets. | [RFC 3987 §3.1](https://www.rfc-editor.org/rfc/rfc3987#section-3.1) |
+| IRI-to-URI output | With `transform: 'URI'`, encode non-ASCII authority, path, query, and fragment characters as uppercase UTF-8 percent triplets. | [RFC 3987 §3.1](https://www.rfc-editor.org/rfc/rfc3987#section-3.1) |
+| URI-to-IRI output | With `transform: 'IRI'`, decode percent-encoded ASCII unreserved characters and strictly legal UTF-8 sequences permitted in each destination component. Retain reserved, malformed, disallowed, and non-UTF-8 octets. | [RFC 3987 §3.2](https://www.rfc-editor.org/rfc/rfc3987#section-3.2) |
 
 Without a mapper, normalization retains the parser's host classification as an IP literal, IPv4 address, or registered name. IPvFuture literals use generic host case normalization. Existing non-ASCII IRI host text is retained unless the registered-name mapper supplies another value.
 
@@ -91,7 +94,7 @@ wss://example.com:00443/chat         → wss://example.com/chat
 ws://example.com?channel=updates     → ws://example.com/?channel=updates
 ```
 
-## Registered-name mapping and URI output
+## Registered-name mapping and representation transformation
 
 For a non-empty registered-name host, `options.mapRegName` is called once with the current host spelling before built-in normalization. IP literals, IPv4 addresses, absent hosts, and empty hosts bypass the mapper.
 
@@ -108,18 +111,27 @@ mapped;
 
 The example deliberately produces text that is not a valid URI or IRI; validating or selecting mapper output belongs to the application.
 
-With `toUri: true`, existing percent triplets remain encoded, and non-ASCII userinfo, mapper output, path, query, and fragment text becomes uppercase UTF-8 percent triplets. A mapper can supply an ASCII hostname when its consuming scheme requires one; this package does not validate mapper output against that scheme.
+With `transform: 'URI'`, retained reserved and non-ASCII percent triplets remain encoded, and literal non-ASCII userinfo, mapper output, path, query, and fragment text becomes uppercase UTF-8 percent triplets. A mapper can supply an ASCII hostname when its consuming scheme requires one; this package does not validate mapper output against that scheme.
 
 ```js
-const { parseIri } = require('identifier-js');
+const { parseIri, parseUri } = require('identifier-js');
 
-parseIri('x:/café?q=資料#résultat').normalize({ toUri: true });
+parseIri('x:/café?q=資料#résultat').normalize({ transform: 'URI' });
 // x:/caf%C3%A9?q=%E8%B3%87%E6%96%99#r%C3%A9sultat
+
+parseUri('x:/caf%C3%A9?q=%E8%B3%87%E6%96%99#r%C3%A9sultat').normalize({ transform: 'IRI' });
+// x:/café?q=資料#résultat
 ```
+
+With `transform: 'IRI'`, conversion uses UTF-8 exclusively and decodes as many eligible percent-encoded characters as possible. Encoded reserved characters, `%25`, malformed or incomplete UTF-8, legacy character encodings, Unicode outside the RFC 3987 component repertoire, and forbidden bidirectional formatting characters remain percent encoded. Private-use characters are decoded only in the query component. The hexadecimal letters of retained triplets are uppercase.
+
+The IRI transformation decodes percent-encoded ASCII unreserved characters even when this changes a registered name into IPv4-looking text. Without an explicit transformation, normalization preserves that registered-name host classification.
+
+ACE-to-Unicode and Unicode-to-ACE registered-name conversion remain application policy. `mapRegName` runs before the selected representation transformation, so applications can provide the appropriate mapping in either direction.
 
 ## Verification
 
-The normalization suite covers URI and IRI parser results, component presence, percent triplets, dot segments, host kinds, RFC 5952 output, HTTP and WebSocket scheme rules, registered-name mapping, IRI-to-URI output, component non-mutation, and idempotence.
+The normalization suite covers URI and IRI parser results, component presence, percent triplets, dot segments, host kinds, RFC 5952 output, HTTP and WebSocket scheme rules, registered-name mapping, both RFC representation transformations, malformed UTF-8 retention, component-specific Unicode repertoires, component non-mutation, round trips, and idempotence.
 
 ```sh
 npm test
