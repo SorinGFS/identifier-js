@@ -31,17 +31,13 @@ export const parseIri: (iri: string) => ParsedIdentifierComponents;
 export const parseIriReference: (iriReference: string) => ParsedRelativeIdentifierComponents;
 /** @throws {Error} If the absolute-IRI is invalid. */
 export const parseAbsoluteIri: (iri: string) => ParsedAbsoluteIdentifierComponents;
-/** Resolve with generic RFC 3986 semantics; this does not invoke a URN resolution service.
- * @throws {Error} If the base or the reference is invalid.
- */
+/** @throws {Error} If the base or the reference is invalid. */
 export function resolveReference(reference: string, base: string, strict?: boolean, returnParts?: false): string;
 export function resolveReference(reference: string, base: string, strict: boolean | undefined, returnParts: true): IdentifierComponents;
 export function resolveReference(reference: string, base: string, strict: boolean | undefined, returnParts: boolean | undefined): string | IdentifierComponents;
 /** @throws {Error} If the reference is invalid. */
 export const toAbsoluteReference: (reference: string) => string;
-/** Derive a generic URI reference without scheme-specific relative-URN semantics.
- * @throws {Error} If the base or the reference is invalid.
- */
+/** @throws {Error} If the base or the reference is invalid. */
 export const toRelativeReference: (target: string, base: string) => string;
 
 /** Map a parsed non-empty registered-name host to caller-owned text. */
@@ -94,17 +90,16 @@ export type AbsoluteIdentifierComponents = {
     query?: string;
 };
 
-// Describe the scheme-specific captures returned by each complete or fragment-free URN grammar.
 type UrnIdentifierComponents = {
     scheme: string;
     nid: string;
     nss: string;
     rComponent?: string;
     qComponent?: string;
-    fragment?: string;
+    fComponent?: string;
 };
 
-type AbsoluteUrnIdentifierComponents = Omit<UrnIdentifierComponents, 'fragment'>;
+type AbsoluteUrnIdentifierComponents = Omit<UrnIdentifierComponents, 'fComponent'>;
 
 export type ParsedIdentifierComponents = (IdentifierComponents | UrnIdentifierComponents) & NormalizableReference;
 export type ParsedRelativeIdentifierComponents = (RelativeIdentifierComponents | UrnIdentifierComponents) & NormalizableReference;

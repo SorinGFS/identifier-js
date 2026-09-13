@@ -169,12 +169,12 @@ console.log(parsed.nid);        // Example
 console.log(parsed.nss);        // a%2f/../B
 console.log(parsed.rComponent); // service?x
 console.log(parsed.qComponent); // key=value
-console.log(parsed.fragment);   // part
+console.log(parsed.fComponent); // part
 console.log(parsed.normalize());
 // urn:example:a%2F/../B?+service?x?=key=value#part
 ```
 
-URN parse results expose `nid`, `nss`, `rComponent`, and `qComponent`, while the RFC-defined f-component is exposed as `fragment`. They do not expose generic `path` or `query` aliases. To require a URN after parsing a value accepted as a general URI, check `parsed.scheme.toLowerCase() === 'urn'`.
+URN parse results expose `nid`, `nss`, `rComponent`, `qComponent`, and `fComponent`. They do not expose generic `path`, `query`, or `fragment` aliases. To require a URN after parsing a value accepted as a general URI, check `parsed.scheme.toLowerCase() === 'urn'`.
 
 URNs remain ASCII even through the IRI operations. Callers representing non-ASCII names must first encode them as UTF-8 and then percent-encode the resulting octets; lexical validation does not decode or verify those octet sequences.
 
@@ -212,7 +212,7 @@ console.log(resolveReference('?page=2', 'https://example.com/items?page=1#curren
 
 Empty authorities, queries, and fragments are preserved during recomposition.
 
-This function performs generic RFC 3986 reference resolution only. It does not invoke a URN resolution service or implement scheme-specific URN resolution semantics.
+`resolveReference` does not apply when either input uses the `urn` scheme. URN resolution services are outside this package's scope.
 
 </details>
 
@@ -242,7 +242,7 @@ console.log(relative); // ../images/logo.svg
 
 When no safe rootless relative form can round-trip to the target, `toRelativeReference` returns the absolute target. Different schemes or authorities also return the target unchanged. Complete dot segments in either path also trigger this fallback because RFC resolution removes them. For those inputs, resolving the result produces the same identifier as resolving the target directly; lexical dot-segment spelling is not preserved.
 
-These conversion functions retain their generic URI-reference behavior. They do not construct, resolve, or interpret scheme-specific relative URNs.
+`toAbsoluteReference` and `toRelativeReference` do not apply when an input uses the `urn` scheme. Relative-URN semantics are outside this package's scope.
 
 </details>
 
@@ -465,7 +465,7 @@ RFC 9562 lists database keys, filenames, system identifiers, and transaction ide
 
 - Generic URI syntax follows RFC 3986 character and component grammar; HTTP, WebSocket, and `file` schemes apply the documented hostname restrictions.
 - Generic IRI syntax follows the RFC 3987 Unicode extensions to URI grammar; HTTP, WebSocket, and `file` schemes apply the documented hostname restrictions.
-- Values with the case-insensitive `urn` scheme follow RFC 8141 namestring syntax and expose NID, NSS, r-component, q-component, and fragment fields through the URI and IRI parsers.
+- Values with the case-insensitive `urn` scheme follow RFC 8141 namestring syntax and expose `nid`, `nss`, `rComponent`, `qComponent`, and `fComponent` fields through the URI and IRI parsers.
 - URN validation establishes generic lexical syntax only, not namespace registration, namespace-specific syntax, assignment, resolution, or equivalence.
 - Validators return `true` or throw at the first grammar violation.
 - `absolute-URI` and `absolute-IRI` use the fragment-free grammar defined by their RFCs; complete URI and IRI operations accept fragments.
@@ -483,7 +483,7 @@ RFC 9562 lists database keys, filenames, system identifiers, and transaction ide
 - `toAbsoluteReference` removes the fragment from an identifier containing a scheme.
 - `toRelativeReference` generates a reference whose RFC resolution equals the target resolution for supported forms.
 - `normalize()` implements the applicable case, percent-encoding, and path-segment rules from RFC 3986 §§6.2.2.1–6.2.2.3 and RFC 3987 §§5.3.2.1, 5.3.2.3–5.3.2.4, RFC 3987 §§3.1–3.2 URI/IRI representation transformation, RFC 5952 IPv6 text, RFC 9110 HTTP(S) port/path forms, RFC 6455 WS(S) port/resource-name forms, and RFC 8141 scheme/NID/percent-triplet normalization without NSS decoding or path reduction.
-- RFC 3986 reference resolution and relative-reference generation receive no URN-specific semantics; RFC 8141 URN resolution services and URN-equivalence APIs are not implemented.
+- Reference resolution and absolute/relative reference conversion do not apply to `urn` inputs; RFC 8141 URN resolution services and URN-equivalence APIs are not implemented.
 
 </details>
 

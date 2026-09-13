@@ -3,7 +3,7 @@
 // A valid URI is always a valid IRI, subject to every implemented scheme's more specific grammar.
 const { recursiveCompile } = require('url-templates');
 const patterns = new Map();
-const implemented_schemes = '(?:[hH][tT][tT][pP][sS]?|[wW][sS][sS]?|[fF][iI][lL][eE]|[uU][rR][nN])';
+const implemented_schemes = '(?:[hH][tT][tT][pP][sS]?|[wW][sS][sS]?|[fF][iI][lL][eE])';
 // RFC3986/RFC3987 common rules + https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.2:~:text=DNS%29%2E-,A,of%20%5BRFC1123%5D%2E
 const commonRules = {
     implemented_schemes,
@@ -81,11 +81,9 @@ const iriRules = {
 };
 // Define RFC 8141 productions and URI/IRI root overrides for the conditional URN profile.
 const urnRules = {
-    scheme: implemented_schemes,
-    URI_reference: '{URI}',
+    scheme: '[uU][rR][nN]',
     URI: '{namestring}',
     absolute_URI: '{assigned_name}(?:{rq_components})?',
-    IRI_reference: '{IRI}',
     IRI: '{URI}',
     absolute_IRI: '{absolute_URI}',
     namestring: '{assigned_name}(?:{rq_components})?(?:#{f_component})?',
@@ -148,7 +146,10 @@ const groupNames = {
     NSS: 'nss',
     r_component: 'rComponent',
     q_component: 'qComponent',
+    f_component: 'fComponent',
 };
+// Keep URN parse results limited to their RFC 8141 component names.
+const genericUrnGroupNames = new Set(['authority', 'userinfo', 'host', 'port', 'path', 'query', 'fragment']);
 // Detect schemes for which the package implements grammar beyond generic URI/IRI syntax.
 const isSpecificScheme = (string) => new RegExp('^' + implemented_schemes + ':').test(string);
 // Select and merge generic, DNS-host, empty-file-host, or URN grammar profiles.
@@ -158,7 +159,11 @@ const rules = (profile) => Object.assign({}, commonRules, uriRules, iriRules, pr
 const parse = (string, rule) => {
     if (typeof string !== 'string') throw new TypeError(`Invalid ${rule.replace('_', '-')} type: must be a string.`);
     const profile = schemeProfile(string);
-    const addNames = (key) => (groupNames[key] ? `(?<${groupNames[key]}>${rules(profile)[key]})` : rules(profile)[key]);
+    // Select only the component captures exposed by the active grammar.
+    const addNames = (key) => {
+        const groupName = groupNames[key];
+        return groupName && !(profile === 'u' && genericUrnGroupNames.has(groupName)) ? `(?<${groupName}>${rules(profile)[key]})` : rules(profile)[key];
+    };
     const ruleId = '_' + profile + rule;
     if (!patterns.has(ruleId)) patterns.set(ruleId, new RegExp(`^${recursiveCompile(rules(profile), rule, addNames)}$`, 'u'));
     const match = patterns.get(ruleId).exec(string);
@@ -562,7 +567,7 @@ function normalizeParsedReference(parts, options = {}) {
         const rComponent = parts.rComponent === undefined ? undefined : normalizePercentEncoding(parts.rComponent, false);
         const qComponent = parts.qComponent === undefined ? undefined : normalizePercentEncoding(parts.qComponent, false);
         const query = rComponent !== undefined ? `+${rComponent}${qComponent === undefined ? '' : `?=${qComponent}`}` : qComponent === undefined ? undefined : `=${qComponent}`;
-        return compose({ scheme: parts.scheme.toLowerCase(), path: `${parts.nid.toLowerCase()}:${normalizePercentEncoding(parts.nss, false)}`, query, fragment: parts.fragment === undefined ? undefined : normalizePercentEncoding(parts.fragment, false) });
+        return compose({ scheme: parts.scheme.toLowerCase(), path: `${parts.nid.toLowerCase()}:${normalizePercentEncoding(parts.nss, false)}`, query, fragment: parts.fComponent === undefined ? undefined : normalizePercentEncoding(parts.fComponent, false) });
     }
     // Normalize each component independently so encoded delimiters cannot become structure.
     const scheme = parts.scheme === undefined ? undefined : parts.scheme.toLowerCase();

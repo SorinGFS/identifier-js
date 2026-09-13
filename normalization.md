@@ -60,7 +60,7 @@ Without a mapper, normalization retains the parser's host classification as an I
 
 ## URNs
 
-A parsed value under the case-insensitive `urn` scheme takes a separate RFC 8141 normalization path using its captured `scheme`, `nid`, `nss`, `rComponent`, `qComponent`, and `fragment` properties.
+A parsed value under the case-insensitive `urn` scheme takes a separate RFC 8141 normalization path using its captured `scheme`, `nid`, `nss`, `rComponent`, `qComponent`, and `fComponent` properties.
 
 | Input component | Output | Source |
 | --- | --- | --- |
