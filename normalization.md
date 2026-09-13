@@ -1,6 +1,6 @@
 # URI and IRI normalization
 
-Parsed URI and IRI results expose `normalize()` for syntax-based normalization, the implemented HTTP, HTTPS, WS, and WSS scheme rules, and optional RFC 3987 URI/IRI representation transformation. The method returns a string and leaves the parsed components unchanged.
+Parsed URI and IRI results expose `normalize()` for syntax-based normalization, the implemented HTTP, HTTPS, WS, WSS, and URN scheme rules, and optional RFC 3987 URI/IRI representation transformation. The method returns a string and leaves the parsed components unchanged.
 
 ## API
 
@@ -49,14 +49,38 @@ parsed.path;
 | Behavior | Implementation | Source |
 | --- | --- | --- |
 | Case normalization | Lowercase the scheme and an ASCII-only host. Uppercase hexadecimal letters in percent triplets. | [RFC 3986 §6.2.2.1](https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1), [RFC 3987 §5.3.2.1](https://www.rfc-editor.org/rfc/rfc3987#section-5.3.2.1) |
-| Percent-encoded unreserved characters | Decode percent triplets representing ASCII letters, digits, `-`, `.`, `_`, or `~`. Retain percent encoding for reserved octets. | [RFC 3986 §§2.2–2.4 and 6.2.2.2](https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.2), [RFC 3987 §5.3.2.3](https://www.rfc-editor.org/rfc/rfc3987#section-5.3.2.3) |
-| Path segments | Apply the RFC dot-segment algorithm where the parsed reference can be normalized independently. Preserve unresolved rootless-relative path semantics. | [RFC 3986 §§5.2.4 and 6.2.2.3](https://www.rfc-editor.org/rfc/rfc3986#section-5.2.4), [RFC 3987 §5.3.2.4](https://www.rfc-editor.org/rfc/rfc3987#section-5.3.2.4) |
+| Percent-encoded unreserved characters | For generic URI/IRI components, decode percent triplets representing ASCII letters, digits, `-`, `.`, `_`, or `~`. Retain percent encoding for reserved octets. URNs use the non-decoding rules below. | [RFC 3986 §§2.2–2.4 and 6.2.2.2](https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.2), [RFC 3987 §5.3.2.3](https://www.rfc-editor.org/rfc/rfc3987#section-5.3.2.3) |
+| Path segments | Apply the RFC dot-segment algorithm where a generic parsed reference can be normalized independently. Preserve unresolved rootless-relative path semantics and every URN NSS segment. | [RFC 3986 §§5.2.4 and 6.2.2.3](https://www.rfc-editor.org/rfc/rfc3986#section-5.2.4), [RFC 3987 §5.3.2.4](https://www.rfc-editor.org/rfc/rfc3987#section-5.3.2.4), [RFC 8141 §§2.2 and 3.1](https://www.rfc-editor.org/rfc/rfc8141#section-3.1) |
 | Component recomposition | Emit authority, query, and fragment delimiters from component presence, including present-empty components. | [RFC 3986 §5.3](https://www.rfc-editor.org/rfc/rfc3986#section-5.3) |
 | IPv6 text | Suppress leading zeroes, compress the longest zero run with first-run tie breaking, and use lowercase hexadecimal. Known embedded-IPv4 forms use mixed notation. | [RFC 5952 §§4–5](https://www.rfc-editor.org/rfc/rfc5952#section-4) |
 | IRI-to-URI output | With `transform: 'URI'`, encode non-ASCII authority, path, query, and fragment characters as uppercase UTF-8 percent triplets. | [RFC 3987 §3.1](https://www.rfc-editor.org/rfc/rfc3987#section-3.1) |
 | URI-to-IRI output | With `transform: 'IRI'`, decode percent-encoded ASCII unreserved characters and strictly legal UTF-8 sequences permitted in each destination component. Retain reserved, malformed, disallowed, and non-UTF-8 octets. | [RFC 3987 §3.2](https://www.rfc-editor.org/rfc/rfc3987#section-3.2) |
 
 Without a mapper, normalization retains the parser's host classification as an IP literal, IPv4 address, or registered name. IPvFuture literals use generic host case normalization. Existing non-ASCII IRI host text is retained unless the registered-name mapper supplies another value.
+
+## URNs
+
+A parsed value under the case-insensitive `urn` scheme takes a separate RFC 8141 normalization path using its captured `scheme`, `nid`, `nss`, `rComponent`, `qComponent`, and `fragment` properties.
+
+| Input component | Output | Source |
+| --- | --- | --- |
+| Scheme | Convert `urn` to lowercase. | [RFC 8141 §3.1](https://www.rfc-editor.org/rfc/rfc8141#section-3.1) |
+| NID | Convert ASCII letters to lowercase. | [RFC 8141 §§2.1 and 3.1](https://www.rfc-editor.org/rfc/rfc8141#section-3.1) |
+| NSS | Uppercase hexadecimal letters in percent triplets without decoding any octet. Preserve literal case, slash structure, and dot segments. | [RFC 8141 §§2.2 and 3.1](https://www.rfc-editor.org/rfc/rfc8141#section-3.1) |
+| r-, q-, and f-components | Retain the components and their delimiters, uppercasing hexadecimal letters in percent triplets without decoding. | [RFC 8141 §2.3](https://www.rfc-editor.org/rfc/rfc8141#section-2.3), [RFC 3986 §6.2.2.1](https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1) |
+
+```js
+const { parseUri } = require('identifier-js');
+
+parseUri('URN:EXAMPLE:a%62/./b/../C?+r%2f?=q%2f#f%2f').normalize();
+// urn:example:a%62/./b/../C?+r%2F?=q%2F#f%2F
+```
+
+RFC 8141 URNs remain ASCII, including when parsed through an IRI operation. Consequently, `transform: 'URI'` and `transform: 'IRI'` produce the same URN representation, and `mapRegName` is not called because a URN has no authority or registered-name host.
+
+For a parsed URN, the current scheme-specific fields are the normalization input. The NSS and optional-component values stay opaque except for percent-triplet letter case. The method leaves every property unchanged.
+
+Normalization is not a URN-equivalence API. RFC 8141 equivalence compares the normalized assigned-name and ignores r-, q-, and f-components; namespace definitions can add further equivalence rules. This method instead retains those optional components in its returned string. The package does not implement generic or namespace-specific URN-equivalence comparison.
 
 ## HTTP and HTTPS
 
@@ -141,6 +165,7 @@ npm test
 
 - [RFC 3986 — Uniform Resource Identifier: Generic Syntax](https://www.rfc-editor.org/rfc/rfc3986)
 - [RFC 3987 — Internationalized Resource Identifiers](https://www.rfc-editor.org/rfc/rfc3987)
+- [RFC 8141 — Uniform Resource Names](https://www.rfc-editor.org/rfc/rfc8141)
 - [RFC 5952 — A Recommendation for IPv6 Address Text Representation](https://www.rfc-editor.org/rfc/rfc5952)
 - [RFC 6455 — The WebSocket Protocol](https://www.rfc-editor.org/rfc/rfc6455)
 - [RFC 9110 — HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110)

@@ -1,19 +1,21 @@
 {
   "name": "identifier-js",
   "version": "0.3.0",
-  "description": "A fast URI/IRI parser, validator, normalizer, resolver, and composer based on RFC 3986 and RFC 3987.",
+  "description": "A fast RFC 3986/3987 URI/IRI parser, validator, normalizer, resolver, and composer with RFC 8141 URN syntax support.",
   "keywords": [
     "IRI",
     "URI",
     "IRI-reference",
     "URI-reference",
+    "URN",
     "ipv4",
     "ipv6",
     "uuid",
     "parser",
     "validator",
     "RFC3986",
-    "RFC3987"
+    "RFC3987",
+    "RFC8141"
   ],
   "homepage": "https://github.com/SorinGFS/identifier-js#readme",
   "bugs": {

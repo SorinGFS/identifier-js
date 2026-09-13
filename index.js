@@ -1,9 +1,9 @@
 'use strict';
-// Parse, validate, normalize, resolve, and convert RFC 3986 URI and RFC 3987 IRI references.
-// a valid URI is always a valid IRI
+// Parse, validate, normalize, resolve, and convert RFC 3986 URI, RFC 3987 IRI, and RFC 8141 URN references.
+// A valid URI is always a valid IRI, subject to every implemented scheme's more specific grammar.
 const { recursiveCompile } = require('url-templates');
 const patterns = new Map();
-const implemented_schemes = '(?:[hH][tT][tT][pP][sS]?|[wW][sS][sS]?|[fF][iI][lL][eE])';
+const implemented_schemes = '(?:[hH][tT][tT][pP][sS]?|[wW][sS][sS]?|[fF][iI][lL][eE]|[uU][rR][nN])';
 // RFC3986/RFC3987 common rules + https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.2:~:text=DNS%29%2E-,A,of%20%5BRFC1123%5D%2E
 const commonRules = {
     implemented_schemes,
@@ -79,6 +79,25 @@ const iriRules = {
     iprivate: '[\\uE000-\\uF8FF\\u{F0000}-\\u{FFFFD}\\u{100000}-\\u{10FFFD}]',
     ucschar: '[\\xA0-\\uD7FF\\uF900-\\uFDCF\\uFDF0-\\uFFEF\\u{10000}-\\u{1FFFD}\\u{20000}-\\u{2FFFD}\\u{30000}-\\u{3FFFD}\\u{40000}-\\u{4FFFD}\\u{50000}-\\u{5FFFD}\\u{60000}-\\u{6FFFD}\\u{70000}-\\u{7FFFD}\\u{80000}-\\u{8FFFD}\\u{90000}-\\u{9FFFD}\\u{A0000}-\\u{AFFFD}\\u{B0000}-\\u{BFFFD}\\u{C0000}-\\u{CFFFD}\\u{D0000}-\\u{DFFFD}\\u{E1000}-\\u{EFFFD}]',
 };
+// Define RFC 8141 productions and URI/IRI root overrides for the conditional URN profile.
+const urnRules = {
+    scheme: implemented_schemes,
+    URI_reference: '{URI}',
+    URI: '{namestring}',
+    absolute_URI: '{assigned_name}(?:{rq_components})?',
+    IRI_reference: '{IRI}',
+    IRI: '{URI}',
+    absolute_IRI: '{absolute_URI}',
+    namestring: '{assigned_name}(?:{rq_components})?(?:#{f_component})?',
+    assigned_name: '{scheme}:{NID}:{NSS}',
+    NID: '{alpha_digit}{ldh}{0,30}{alpha_digit}',
+    ldh: '(?:{alpha_digit}|-)',
+    NSS: '{pchar}(?:{pchar}|/)*',
+    rq_components: '(?:[?][+]{r_component})?(?:[?]={q_component})?',
+    r_component: '{pchar}(?:{pchar}|/|[?](?!=))*',
+    q_component: '{pchar}(?:{pchar}|/|[?])*',
+    f_component: '{fragment}',
+};
 // Reuse the grammar repertoires when selecting URI octets safe for IRI output.
 const uriUnreservedPattern = new RegExp(`^${commonRules.unreserved}$`);
 const iriUcscharPattern = new RegExp(`^${iriRules.ucschar}$`, 'u');
@@ -125,11 +144,16 @@ const groupNames = {
     ipath_noscheme: 'path',
     ipath_rootless: 'path',
     ipath_empty: 'path',
+    NID: 'nid',
+    NSS: 'nss',
+    r_component: 'rComponent',
+    q_component: 'qComponent',
 };
-// Select and merge generic, DNS-host, or empty-file-host grammar overrides.
+// Detect schemes for which the package implements grammar beyond generic URI/IRI syntax.
 const isSpecificScheme = (string) => new RegExp('^' + implemented_schemes + ':').test(string);
-const schemeProfile = (string) => (string.slice(0, 8).toLowerCase() === 'file:///' ? 'f' : isSpecificScheme(string) ? 's' : '');
-const rules = (profile) => Object.assign({}, commonRules, uriRules, iriRules, profile === 'f' ? emptyFileHostRules : profile ? schemeSpecificRules : {});
+// Select and merge generic, DNS-host, empty-file-host, or URN grammar profiles.
+const schemeProfile = (string) => (string.slice(0, 4).toLowerCase() === 'urn:' ? 'u' : string.slice(0, 8).toLowerCase() === 'file:///' ? 'f' : isSpecificScheme(string) ? 's' : '');
+const rules = (profile) => Object.assign({}, commonRules, uriRules, iriRules, profile === 'u' ? urnRules : profile === 'f' ? emptyFileHostRules : profile ? schemeSpecificRules : {});
 // parse (slower, it uses regex.exec and includes named capture groups)
 const parse = (string, rule) => {
     if (typeof string !== 'string') throw new TypeError(`Invalid ${rule.replace('_', '-')} type: must be a string.`);
@@ -533,6 +557,13 @@ function normalizeParsedReference(parts, options = {}) {
     const { transform, mapRegName } = options;
     if (transform !== undefined && transform !== 'URI' && transform !== 'IRI') throw new TypeError('Invalid transform option: must be "URI" or "IRI".');
     if (mapRegName !== undefined && typeof mapRegName !== 'function') throw new TypeError('Invalid registered-name mapper type: must be a function.');
+    // Normalize captured URN fields without applying generic path or representation processing.
+    if (parts.nid !== undefined) {
+        const rComponent = parts.rComponent === undefined ? undefined : normalizePercentEncoding(parts.rComponent, false);
+        const qComponent = parts.qComponent === undefined ? undefined : normalizePercentEncoding(parts.qComponent, false);
+        const query = rComponent !== undefined ? `+${rComponent}${qComponent === undefined ? '' : `?=${qComponent}`}` : qComponent === undefined ? undefined : `=${qComponent}`;
+        return compose({ scheme: parts.scheme.toLowerCase(), path: `${parts.nid.toLowerCase()}:${normalizePercentEncoding(parts.nss, false)}`, query, fragment: parts.fragment === undefined ? undefined : normalizePercentEncoding(parts.fragment, false) });
+    }
     // Normalize each component independently so encoded delimiters cannot become structure.
     const scheme = parts.scheme === undefined ? undefined : parts.scheme.toLowerCase();
     const normalized = {
