@@ -212,7 +212,7 @@ When no safe rootless relative form can round-trip to the target, `toRelativeRef
 Every URI and IRI parse result provides an optional, non-enumerable `normalize()` method. Parsing remains usable by itself; normalization runs only when the method is called and returns a string without modifying the parsed components.
 
 <details>
-<summary><strong>API, behavior, and examples</strong></summary>
+<summary><strong>API and examples</strong></summary>
 
 ```ts
 type RegNameMapper = (regName: string) => string

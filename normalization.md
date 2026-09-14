@@ -110,9 +110,21 @@ A parsed value under the case-insensitive `urn` scheme takes the separate RFC 81
 ```js
 const { parseUri } = require('identifier-js');
 
-parseUri('URN:EXAMPLE:a%62/./b/../C?+r%2f?=q%2f#f%2f').normalize();
+const input = 'URN:EXAMPLE:a%62/./b/../C?+r%2f?=q%2f#f%2f';
+const output = parseUri(input).normalize();
+
+output;
 // urn:example:a%62/./b/../C?+r%2F?=q%2F#f%2F
 ```
+
+This example demonstrates each URN normalization rule:
+
+- `URN` becomes `urn` because the scheme is case-insensitive and normalized to lowercase.
+- `EXAMPLE` becomes `example` because ASCII letters in the NID are normalized to lowercase.
+- `%62` remains encoded in the NSS rather than becoming `b`; URN normalization does not decode percent-encoded NSS octets.
+- `/./b/../C` remains unchanged because the NSS is opaque to generic path processing: dot segments are not removed, and literal NSS case is preserved.
+- The r-, q-, and f-components and their `?+`, `?=`, and `#` delimiters are retained.
+- `%2f` becomes `%2F` in each optional component because retained percent triplets use uppercase hexadecimal letters without decoding the represented `/`.
 
 RFC 8141 URNs remain ASCII, including when parsed through an IRI operation. Consequently, `transform: 'URI'` and `transform: 'IRI'` produce the same URN representation, and `mapRegName` is not called because a URN has no authority or registered-name host.
 
@@ -137,19 +149,53 @@ mapped;
 
 The example deliberately produces text that is not a valid URI or IRI; validating or selecting mapper output belongs to the application.
 
+### IRI-to-URI transformation
+
 With `transform: 'URI'`, retained reserved and non-ASCII percent triplets remain encoded, and literal non-ASCII userinfo, mapper output, path, query, and fragment text becomes uppercase UTF-8 percent triplets. A mapper can supply an ASCII hostname when its consuming scheme requires one; this package does not validate mapper output against that scheme.
 
 ```js
-const { parseIri, parseUri } = require('identifier-js');
+const { parseIri } = require('identifier-js');
 
-parseIri('x:/café?q=資料#résultat').normalize({ transform: 'URI' });
-// x:/caf%C3%A9?q=%E8%B3%87%E6%96%99#r%C3%A9sultat
+const input = 'x://usér@exämple/latin-é/emoji-😀?native=資料&private=\uE000&reserved=/&encoded=%c3%a9#résultat';
+const output = parseIri(input).normalize({ transform: 'URI' });
 
-parseUri('x:/caf%C3%A9?q=%E8%B3%87%E6%96%99#r%C3%A9sultat').normalize({ transform: 'IRI' });
-// x:/café?q=資料#résultat
+output;
+// x://us%C3%A9r@ex%C3%A4mple/latin-%C3%A9/emoji-%F0%9F%98%80?native=%E8%B3%87%E6%96%99&private=%EE%80%80&reserved=/&encoded=%C3%A9#r%C3%A9sultat
 ```
 
+This example demonstrates each relevant output rule:
+
+- `usér`, `exämple`, `latin-é`, and `résultat` become UTF-8 percent triplets in userinfo, host, path, and fragment text.
+- `😀` is processed as one Unicode scalar and becomes its four UTF-8 octets `%F0%9F%98%80`.
+- `資料` becomes `%E8%B3%87%E6%96%99` in the query.
+- The query's private-use character `\uE000` becomes `%EE%80%80`.
+- The literal reserved `/` remains literal because it is already valid URI query syntax.
+- The existing encoded sequence `%c3%a9` remains encoded while its hexadecimal letters become uppercase as `%C3%A9`.
+
+### URI-to-IRI transformation
+
 With `transform: 'IRI'`, conversion uses UTF-8 exclusively and decodes as many eligible percent-encoded characters as possible. Encoded reserved characters, `%25`, malformed or incomplete UTF-8, legacy character encodings, Unicode outside the RFC 3987 component repertoire, and forbidden bidirectional formatting characters remain percent encoded. Private-use characters are decoded only in the query component. The hexadecimal letters of retained triplets are uppercase.
+
+```js
+const { parseUri } = require('identifier-js');
+
+const input = 'x:/ok-%C3%A9/reserved-%2F/percent-%25/malformed-%C3%28/incomplete-%E2%82/latin1-%E9/outside-%EF%B7%90/bidi-%E2%80%8E';
+const output = parseUri(input).normalize({ transform: 'IRI' });
+
+output;
+// x:/ok-é/reserved-%2F/percent-%25/malformed-%C3%28/incomplete-%E2%82/latin1-%E9/outside-%EF%B7%90/bidi-%E2%80%8E
+```
+
+This example shows why transformation is not equivalent to applying `decodeURIComponent()` to every triplet:
+
+- `%C3%A9` becomes `é` because it is valid UTF-8 for a character permitted in an IRI path.
+- `%2F` remains encoded because `/` is reserved and decoding it could change path structure.
+- `%25` remains encoded because decoding it would introduce a literal percent sign.
+- `%C3%28` remains encoded because it is malformed UTF-8.
+- `%E2%82` remains encoded because it is an incomplete UTF-8 sequence.
+- `%E9` remains encoded because a Latin-1 or Windows-1252 byte is not valid UTF-8 by itself.
+- `%EF%B7%90` remains encoded because it represents U+FDD0, which is outside the RFC 3987 character repertoire.
+- `%E2%80%8E` remains encoded because it represents U+200E, a forbidden bidirectional formatting character.
 
 The IRI transformation decodes percent-encoded ASCII unreserved characters even when this changes a registered name into IPv4-looking text. Without an explicit transformation, normalization preserves that registered-name host classification.
 
