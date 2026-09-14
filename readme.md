@@ -2,17 +2,17 @@
 
 title: Identifier JS
 
-description: RFC 3986/3987 URI and IRI tools with scheme-specific RFC 8141 URN syntax and normalization support.
+description: RFC 3986/3987 URI and IRI tools with RFC 8141 URN grammar and normalization support.
 
 ---
 
 # Identifier JS
 
-`identifier-js` is a URI/IRI parser, validator, normalizer, resolver, and composer based on RFC [3986](https://www.rfc-editor.org/rfc/rfc3986) and RFC [3987](https://www.rfc-editor.org/rfc/rfc3987), with scheme-specific RFC [8141](https://www.rfc-editor.org/rfc/rfc8141) URN support. Its recognized HTTP, WebSocket, and `file` schemes retain the documented hostname-policy restrictions below. It provides:
+`identifier-js` is a URI/IRI parser, validator, normalizer, resolver, and reference converter based on RFC [3986](https://www.rfc-editor.org/rfc/rfc3986) and RFC [3987](https://www.rfc-editor.org/rfc/rfc3987), with an RFC [8141](https://www.rfc-editor.org/rfc/rfc8141) URN grammar profile. HTTP, WebSocket, and `file` identifiers use the documented DNS-host grammar where applicable. It provides:
 
 - URI and IRI validation, including RFC 8141 URN namestring syntax;
-- parsed generic URI/IRI components and scheme-specific URN components;
-- conservative syntax normalization, recognized-scheme forms, and a registered-name extension point;
+- parsed generic URI/IRI components and URN-specific components;
+- conservative syntax normalization, scheme-specific forms, and a registered-name extension point;
 - RFC 3986 reference resolution and dot-segment removal;
 - relative-reference generation with resolution round-trip guarantees for supported forms;
 - UUID and UUIDv4 lexical validation;
@@ -28,7 +28,7 @@ npm install identifier-js
 
 ## API
 
-Every validator returns `true` or throws at the first detected violation. Parsing and reference operations also throw when their input does not satisfy the required grammar.
+Every validator returns `true` for valid input and otherwise throws. Parsing and reference operations also throw when their input does not satisfy the required grammar.
 
 ### Validate URI syntax
 
@@ -143,45 +143,6 @@ console.log(parseIri('https://usér@例え.テスト:8443/résumé?lang=fr#profi
 
 </details>
 
-### Validate and parse RFC 8141 URNs
-
-URNs use the existing URI and IRI operations because a URN is a URI under the `urn` scheme. Values with a case-insensitive `urn:` prefix are validated against RFC 8141 namestring syntax; no separate `isUrn` or `parseUrn` API is exported.
-
-```text
-urn:NID:NSS[?+r-component][?=q-component][#f-component]
-```
-
-The NID contains 2–32 ASCII characters, starts and ends with a letter or digit, and permits letters, digits, or hyphens internally. The NSS begins with an RFC 3986 `pchar` and then permits `pchar` or `/`. The ordered r- and q-components also begin with `pchar` and then permit `pchar`, `/`, or `?`, while an f-component can be empty. The first `?=` sequence after an r-component starts the q-component, and any other question mark outside an optional component is rejected.
-
-<details>
-<summary><strong>API behavior and examples</strong></summary>
-
-```js
-const { isUri, isIri, parseUri } = require('identifier-js');
-
-const value = 'URN:Example:a%2f/../B?+service?x?=key=value#part';
-console.log(isUri(value)); // true
-console.log(isIri(value)); // true
-
-const parsed = parseUri(value);
-console.log(parsed.scheme);     // URN
-console.log(parsed.nid);        // Example
-console.log(parsed.nss);        // a%2f/../B
-console.log(parsed.rComponent); // service?x
-console.log(parsed.qComponent); // key=value
-console.log(parsed.fComponent); // part
-console.log(parsed.normalize());
-// urn:example:a%2F/../B?+service?x?=key=value#part
-```
-
-URN parse results expose `nid`, `nss`, `rComponent`, `qComponent`, and `fComponent`. They do not expose generic `path`, `query`, or `fragment` aliases. To require a URN after parsing a value accepted as a general URI, check `parsed.scheme.toLowerCase() === 'urn'`.
-
-URNs remain ASCII even through the IRI operations. Callers representing non-ASCII names must first encode them as UTF-8 and then percent-encode the resulting octets; lexical validation does not decode or verify those octet sequences.
-
-Validation is deliberately lexical and namespace-independent. Success does not prove that an NID is registered or otherwise legitimate, that an NSS obeys a namespace's additional syntax and canonicalization rules, or that the name was legitimately assigned.
-
-</details>
-
 ### Resolve a reference
 
 Resolve a URI or IRI reference against an absolute base using RFC 3986 §5.
@@ -284,7 +245,7 @@ Normalization implements RFC 3986 and RFC 3987 syntax normalization for scheme a
 
 URN normalization lowercases the scheme and NID, uppercases percent-triplet hexadecimal letters without decoding, and preserves NSS case, slashes, and dot segments. The r-, q-, and f-components are retained, so normalized-string equality is not the RFC 8141 URN-equivalence procedure. Namespace-specific equivalence and URN resolution are outside this package's scope. URI/IRI transformation and registered-name mapping options do not alter authority-free, ASCII-only URNs.
 
-For a non-empty registered-name host, `mapRegName` receives the current host spelling before built-in normalization. The mapper exclusively owns validation, representation, and host-kind policy for its returned string. Apart from enforcing the declared string return type, this package does not check whether mapper output is non-empty, remains a registered name, introduces delimiters, resembles an IP address, or satisfies a scheme-specific hostname grammar.
+For a non-empty registered-name host, `mapRegName` receives the current host spelling before built-in normalization. The mapper exclusively owns validation, representation, and host-kind policy for its returned string. Apart from enforcing the declared string return type, this package does not check whether mapper output is non-empty, remains a registered name, introduces delimiters, resembles an IP address, or satisfies the DNS-host grammar.
 
 With `transform: 'URI'`, non-ASCII userinfo, mapper output, path, query, and fragment text becomes uppercase UTF-8 percent triplets under RFC 3987 §3.1. With `transform: 'IRI'`, eligible percent-encoded ASCII unreserved characters and strictly legal UTF-8 sequences become IRI characters under RFC 3987 §3.2; reserved, malformed, disallowed, and non-UTF-8 octets remain encoded. Private-use characters are decoded only in queries, and forbidden bidirectional formatting characters remain encoded. A mapper can supply the desired Unicode or ASCII hostname representation; this package does not enforce that policy or validate the complete normalized result.
 
@@ -319,27 +280,27 @@ console.log(isUUIDv4('123e4567-e89b-42d3-9456-426614174000')); // true
 
 The parser builds its validation logic from declarative RFC grammar fragments:
 
-1. Select the applicable generic or scheme-specific URI/IRI syntax.
-2. Recursively expand grammar references through `url-templates`.
-3. Add named captures for the components exposed by the selected syntax.
+1. Select the generic, DNS-host, empty-file-host, or URN grammar profile.
+2. Merge and recursively expand grammar references through `url-templates`.
+3. Add named captures for the public components exposed by parsing.
 4. Compile the complete expression with Unicode support.
-5. Cache expressions by operation, grammar rule, and scheme class.
+5. Cache expressions by operation, grammar rule, and grammar profile.
 6. Validate with `RegExp.test()` or parse with `RegExp.exec()`.
-7. Resolve references by component inheritance, path merging, dot-segment removal, and definedness-preserving recomposition.
+7. Resolve references by component inheritance, path merging, dot-segment removal, and component recomposition.
 
 <details>
 <summary><strong>Lazy compilation and cache behavior</strong></summary>
 
-Parsing and validation use separate cached expressions because parsing requires named groups and validation does not. Generic and scheme-specific identifiers also use separate entries.
+Parsing and validation use separate cached expressions because parsing requires named groups and validation does not. Each grammar profile also uses separate entries.
 
-The first call for an operation/rule/policy combination includes recursive grammar expansion and regular-expression compilation. Later calls reuse the cached expression and are considerably faster. No regular expressions are generated during package import.
+The first call for an operation, grammar rule, and grammar profile includes recursive grammar expansion and regular-expression compilation. Later calls reuse the cached expression and are considerably faster. No regular expressions are generated during package import.
 
 </details>
 
 <details>
-<summary><strong>Scheme-specific hostname policy</strong></summary>
+<summary><strong>DNS-host grammar profile</strong></summary>
 
-The following schemes trigger DNS-style ASCII or Unicode label rules instead of the fully generic `reg-name` grammar:
+The following schemes trigger DNS-style ASCII or Unicode label rules instead of the generic `reg-name` grammar:
 
 - `http`
 - `https`
@@ -347,9 +308,46 @@ The following schemes trigger DNS-style ASCII or Unicode label rules instead of 
 - `wss`
 - `file`
 
-Matching is case-insensitive. Other valid schemes use generic RFC 3986/3987 registered-name syntax; URNs instead follow RFC 8141 namestring syntax. RFC 8089's empty `file` authority is accepted when followed by an absolute path, as in `file:///path`; empty hosts remain rejected for HTTP and WebSocket schemes.
+Matching is case-insensitive. Other valid schemes use generic RFC 3986/3987 registered-name syntax. RFC 8089's empty `file` authority is accepted when followed by an absolute path, as in `file:///path`; empty hosts remain rejected for HTTP and WebSocket schemes.
 
-Parsing validates DNS-style label shape and the selected RFC 3987 Unicode character classes. A registered-name mapper runs later during optional normalization, and its returned string is not submitted to this hostname policy again.
+Parsing validates DNS-style label shape and the selected RFC 3987 Unicode character classes. A registered-name mapper runs later during optional normalization, and its returned string is not submitted to the DNS-host grammar again.
+
+</details>
+
+<details>
+<summary><strong>URN grammar profile</strong></summary>
+
+URNs use the existing URI and IRI operations because a URN is a URI under the `urn` scheme. Values with a case-insensitive `urn:` prefix select the closed RFC 8141 grammar profile; no separate `isUrn` or `parseUrn` API is exported.
+
+```text
+urn:NID:NSS[?+r-component][?=q-component][#f-component]
+```
+
+The NID contains 2–32 ASCII characters, starts and ends with a letter or digit, and permits letters, digits, or hyphens internally. The NSS begins with an RFC 3986 `pchar` and then permits `pchar` or `/`. The ordered r- and q-components also begin with `pchar` and then permit `pchar`, `/`, or `?`, while an f-component can be empty. The first `?=` sequence after an r-component starts the q-component, and any other question mark outside an optional component is rejected.
+
+```js
+const { isUri, isIri, parseUri } = require('identifier-js');
+
+const value = 'URN:Example:a%2f/../B?+service?x?=key=value#part';
+console.log(isUri(value)); // true
+console.log(isIri(value)); // true
+
+const parsed = parseUri(value);
+console.log(parsed.scheme);     // URN
+console.log(parsed.nid);        // Example
+console.log(parsed.nss);        // a%2f/../B
+console.log(parsed.rComponent); // service?x
+console.log(parsed.qComponent); // key=value
+console.log(parsed.fComponent); // part
+console.log(parsed.normalize());
+// urn:example:a%2F/../B?+service?x?=key=value#part
+```
+
+URN parse results expose `nid`, `nss`, `rComponent`, `qComponent`, and `fComponent`. They do not expose generic `authority`, `userinfo`, `host`, `port`, `path`, `query`, or `fragment` fields. To require a URN after parsing a value accepted as a general URI, check `parsed.scheme.toLowerCase() === 'urn'`.
+
+URNs remain ASCII even through the IRI operations. Callers representing non-ASCII names must first encode them as UTF-8 and then percent-encode the resulting octets; lexical validation does not decode or verify those octet sequences.
+
+Validation is deliberately lexical and namespace-independent. Success does not prove that an NID is registered or otherwise legitimate, that an NSS obeys a namespace's additional syntax and canonicalization rules, or that the name was legitimately assigned.
 
 </details>
 
@@ -463,9 +461,9 @@ RFC 9562 lists database keys, filenames, system identifiers, and transaction ide
 <details>
 <summary><strong>Validation and parsing</strong></summary>
 
-- Generic URI syntax follows RFC 3986 character and component grammar; HTTP, WebSocket, and `file` schemes apply the documented hostname restrictions.
-- Generic IRI syntax follows the RFC 3987 Unicode extensions to URI grammar; HTTP, WebSocket, and `file` schemes apply the documented hostname restrictions.
-- Values with the case-insensitive `urn` scheme follow RFC 8141 namestring syntax and expose `nid`, `nss`, `rComponent`, `qComponent`, and `fComponent` fields through the URI and IRI parsers.
+- The generic URI grammar profile follows RFC 3986 character and component syntax; HTTP, WebSocket, and `file` schemes select the documented DNS-host rules.
+- The generic IRI grammar profile follows the RFC 3987 Unicode extensions to URI syntax; HTTP, WebSocket, and `file` schemes select the documented DNS-host rules.
+- Values with the case-insensitive `urn` scheme select the closed RFC 8141 grammar profile and expose `nid`, `nss`, `rComponent`, `qComponent`, and `fComponent` fields through the URI and IRI parsers.
 - URN validation establishes generic lexical syntax only, not namespace registration, namespace-specific syntax, assignment, resolution, or equivalence.
 - Validators return `true` or throw at the first grammar violation.
 - `absolute-URI` and `absolute-IRI` use the fragment-free grammar defined by their RFCs; complete URI and IRI operations accept fragments.
@@ -523,7 +521,7 @@ Run `gh workspace-data load` again to refresh materialized data after public-dat
 
 ### Tests
 
-The active suite contains 3,157 tests covering URI/IRI validation and parsing, RFC 8141 URN syntax and normalization, generic normalization, bidirectional URI/IRI representation transformation, scheme-specific hosts, IPv4, IPv6, IPvFuture, ports, UUIDs, RFC 3986 resolution examples, empty components, absolute conversion, and relative-reference round trips, including 2,646 generated combinations of target/base paths, query-presence states, and target-fragment states across equivalent URI and IRI families.
+The active suite contains 3,157 tests covering URI/IRI validation and parsing, RFC 8141 URN syntax and normalization, generic normalization, bidirectional URI/IRI representation transformation, DNS-host grammar, IPv4, IPv6, IPvFuture, ports, UUIDs, RFC 3986 resolution examples, empty components, absolute conversion, and relative-reference round trips, including 2,646 generated combinations of target/base paths, query-presence states, and target-fragment states across equivalent URI and IRI families.
 
 <details>
 <summary><strong>Test details</strong></summary>

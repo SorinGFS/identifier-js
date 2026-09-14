@@ -1,13 +1,13 @@
 'use strict';
-// Parse, validate, normalize, resolve, and convert RFC 3986 URI, RFC 3987 IRI, and RFC 8141 URN references.
+// Validate UUIDs and parse, validate, normalize, resolve, and convert RFC 3986 URI, RFC 3987 IRI, and RFC 8141 URN references.
 // A valid URI is always a valid IRI, subject to every implemented scheme's more specific grammar.
 const { recursiveCompile } = require('url-templates');
-const patterns = new Map();
-const implemented_schemes = '(?:[hH][tT][tT][pP][sS]?|[wW][sS][sS]?|[fF][iI][lL][eE])';
-// RFC3986/RFC3987 common rules + https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.2:~:text=DNS%29%2E-,A,of%20%5BRFC1123%5D%2E
+const patternCache = new Map();
+const dnsHostSchemesPattern = '(?:[hH][tT][tT][pP][sS]?|[wW][sS][sS]?|[fF][iI][lL][eE])';
+// Define shared RFC 3986/3987 productions and helper productions used by UUID and scheme-specific grammars.
 const commonRules = {
-    implemented_schemes,
-    scheme: '(?!{implemented_schemes}:)[a-zA-Z][a-zA-Z0-9+.-]*',
+    dnsHostSchemesPattern,
+    scheme: '(?!{dnsHostSchemesPattern}:)[a-zA-Z][a-zA-Z0-9+.-]*',
     port: '\\d*',
     IP_literal: '\\[(?:{IPv6address}|{IPvFuture})\\]',
     IPv6address: '(?:(?:{h16}:){6}{ls32}|::(?:{h16}:){5}{ls32}|(?:(?:{h16})?)::(?:{h16}:){4}{ls32}|(?:(?:{h16}:)?{h16})?::(?:{h16}:){3}{ls32}|(?:(?:{h16}:){0,2}{h16})?::(?:{h16}:){2}{ls32}|(?:(?:{h16}:){0,3}{h16})?::(?:{h16}:){1}{ls32}|(?:(?:{h16}:){0,4}{h16})?::{ls32}|(?:(?:{h16}:){0,5}{h16})?::{h16}|(?:(?:{h16}:){0,6}{h16})?::)',
@@ -26,7 +26,7 @@ const commonRules = {
     UUID: '{hex_digit}{8}-{hex_digit}{4}-{hex_digit}{4}-{hex_digit}{4}-{hex_digit}{12}',
     UUID_v4: '{hex_digit}{8}-{hex_digit}{4}-4{hex_digit}{3}-[89abAB]{hex_digit}{3}-{hex_digit}{12}',
 };
-// RFC3986 rules
+// Define RFC 3986 URI productions.
 const uriRules = {
     URI_reference: '(?:{URI}|{relative_ref})',
     URI: '{absolute_URI}(?:#{fragment})?',
@@ -51,7 +51,7 @@ const uriRules = {
     fragment: '(?:{pchar}|\/|\\?)*',
     pchar: '(?:{unreserved}|{pct_encoded}|{sub_delims}|:|@)',
 };
-// RFC3987 rules
+// Define RFC 3987 IRI productions.
 const iriRules = {
     IRI_reference: '(?:{IRI}|{irelative_ref})',
     IRI: '{absolute_IRI}(?:#{ifragment})?',
@@ -79,32 +79,34 @@ const iriRules = {
     iprivate: '[\\uE000-\\uF8FF\\u{F0000}-\\u{FFFFD}\\u{100000}-\\u{10FFFD}]',
     ucschar: '[\\xA0-\\uD7FF\\uF900-\\uFDCF\\uFDF0-\\uFFEF\\u{10000}-\\u{1FFFD}\\u{20000}-\\u{2FFFD}\\u{30000}-\\u{3FFFD}\\u{40000}-\\u{4FFFD}\\u{50000}-\\u{5FFFD}\\u{60000}-\\u{6FFFD}\\u{70000}-\\u{7FFFD}\\u{80000}-\\u{8FFFD}\\u{90000}-\\u{9FFFD}\\u{A0000}-\\u{AFFFD}\\u{B0000}-\\u{BFFFD}\\u{C0000}-\\u{CFFFD}\\u{D0000}-\\u{DFFFD}\\u{E1000}-\\u{EFFFD}]',
 };
-// Define RFC 8141 productions and URI/IRI root overrides for the conditional URN profile.
+// Define a closed RFC 8141 profile whose root overrides and direct fragment expression expose only URN captures.
 const urnRules = {
     scheme: '[uU][rR][nN]',
+    URI_reference: '{URI}',
     URI: '{namestring}',
     absolute_URI: '{assigned_name}(?:{rq_components})?',
+    IRI_reference: '{IRI}',
     IRI: '{URI}',
     absolute_IRI: '{absolute_URI}',
     namestring: '{assigned_name}(?:{rq_components})?(?:#{f_component})?',
     assigned_name: '{scheme}:{NID}:{NSS}',
     NID: '{alpha_digit}{ldh}{0,30}{alpha_digit}',
     ldh: '(?:{alpha_digit}|-)',
-    NSS: '{pchar}(?:{pchar}|/)*',
+    NSS: '{pchar}(?:{pchar}|\/)*',
     rq_components: '(?:[?][+]{r_component})?(?:[?]={q_component})?',
-    r_component: '{pchar}(?:{pchar}|/|[?](?!=))*',
-    q_component: '{pchar}(?:{pchar}|/|[?])*',
-    f_component: '{fragment}',
+    r_component: '{pchar}(?:{pchar}|\/|[?](?!=))*',
+    q_component: '{pchar}(?:{pchar}|\/|[?])*',
+    f_component: uriRules.fragment,
 };
-// Reuse the grammar repertoires when selecting URI octets safe for IRI output.
+// Compile character-repertoire checks used during URI/IRI percent-encoding normalization.
 const uriUnreservedPattern = new RegExp(`^${commonRules.unreserved}$`);
 const iriUcscharPattern = new RegExp(`^${iriRules.ucschar}$`, 'u');
 const iriPrivatePattern = new RegExp(`^${iriRules.iprivate}$`, 'u');
 // Apply the additional RFC 3987 Section 4.1 prose restriction outside the ABNF repertoire.
 const forbiddenIriFormattingPattern = /^[\u200E\u200F\u202A-\u202E]$/u;
-// scheme specific URI reg_name and IRI ireg_name
-const schemeSpecificRules = {
-    scheme: implemented_schemes,
+// Restrict registered names for selected hierarchical schemes to DNS-style labels.
+const dnsHostRules = {
+    scheme: dnsHostSchemesPattern,
     reg_name: '(?:(?=.{1,255}(?:[:/?#]|$))(?:{a_label})(?:\\.{a_label})*)',
     a_label: '(?:{alpha_digit})(?:(?:{alpha_digit}|-){0,61}(?:{alpha_digit}))?',
     ireg_name: '(?:(?=.{1,255}(?:[:/?#]|$))(?:{u_label})(?:{u_separator}(?:{u_label}))*)',
@@ -113,13 +115,13 @@ const schemeSpecificRules = {
     u_char: '[\\p{L}\\p{N}\\p{Mn}\\p{Mc}\\u200C\\u200D\\u00B7\\u0375\\u30FB\\u05F3\\u05F4]',
 };
 // Recognize RFC 8089's empty file authority without weakening other scheme host policies.
-const emptyFileHostRules = Object.assign({}, schemeSpecificRules, {
+const emptyFileHostRules = Object.assign({}, dnsHostRules, {
     scheme: '[fF][iI][lL][eE]',
     reg_name: '',
     ireg_name: '',
 });
-// pattern RFC group names
-const groupNames = {
+// Map grammar productions to the public named captures returned by parsers.
+const captureGroupNames = {
     scheme: 'scheme',
     port: 'port',
     authority: 'authority',
@@ -148,25 +150,21 @@ const groupNames = {
     q_component: 'qComponent',
     f_component: 'fComponent',
 };
-// Keep URN parse results limited to their RFC 8141 component names.
-const genericUrnGroupNames = new Set(['authority', 'userinfo', 'host', 'port', 'path', 'query', 'fragment']);
-// Detect schemes for which the package implements grammar beyond generic URI/IRI syntax.
-const isSpecificScheme = (string) => new RegExp('^' + implemented_schemes + ':').test(string);
-// Select and merge generic, DNS-host, empty-file-host, or URN grammar profiles.
-const schemeProfile = (string) => (string.slice(0, 4).toLowerCase() === 'urn:' ? 'u' : string.slice(0, 8).toLowerCase() === 'file:///' ? 'f' : isSpecificScheme(string) ? 's' : '');
-const rules = (profile) => Object.assign({}, commonRules, uriRules, iriRules, profile === 'u' ? urnRules : profile === 'f' ? emptyFileHostRules : profile ? schemeSpecificRules : {});
-// parse (slower, it uses regex.exec and includes named capture groups)
+// Detect schemes whose registered names use the DNS-host grammar.
+const usesDnsHostRules = (string) => new RegExp('^' + dnsHostSchemesPattern + ':').test(string);
+// Grammar profiles: '' is generic, 's' uses DNS-host rules, 'f' permits an empty file host, and 'u' is URN.
+const grammarProfile = (string) => (string.slice(0, 4).toLowerCase() === 'urn:' ? 'u' : string.slice(0, 8).toLowerCase() === 'file:///' ? 'f' : usesDnsHostRules(string) ? 's' : '');
+// Select and merge the rules for the active grammar profile.
+const grammarRules = (profile) => Object.assign({}, commonRules, uriRules, iriRules, profile === 'u' ? urnRules : profile === 'f' ? emptyFileHostRules : profile ? dnsHostRules : {});
+// Compile and execute a grammar with named component captures.
 const parse = (string, rule) => {
     if (typeof string !== 'string') throw new TypeError(`Invalid ${rule.replace('_', '-')} type: must be a string.`);
-    const profile = schemeProfile(string);
-    // Select only the component captures exposed by the active grammar.
-    const addNames = (key) => {
-        const groupName = groupNames[key];
-        return groupName && !(profile === 'u' && genericUrnGroupNames.has(groupName)) ? `(?<${groupName}>${rules(profile)[key]})` : rules(profile)[key];
-    };
-    const ruleId = '_' + profile + rule;
-    if (!patterns.has(ruleId)) patterns.set(ruleId, new RegExp(`^${recursiveCompile(rules(profile), rule, addNames)}$`, 'u'));
-    const match = patterns.get(ruleId).exec(string);
+    const profile = grammarProfile(string);
+    // Wrap each public component production in its associated named capture.
+    const addNamedCapture = (key) => (captureGroupNames[key] ? `(?<${captureGroupNames[key]}>${grammarRules(profile)[key]})` : grammarRules(profile)[key]);
+    const cacheKey = '_' + profile + rule;
+    if (!patternCache.has(cacheKey)) patternCache.set(cacheKey, new RegExp(`^${recursiveCompile(grammarRules(profile), rule, addNamedCapture)}$`, 'u'));
+    const match = patternCache.get(cacheKey).exec(string);
     if (match) {
         Object.defineProperty(match.groups, 'normalize', {
             // Normalize this parsed result only when its optional method is called.
@@ -178,17 +176,17 @@ const parse = (string, rule) => {
     }
     throw new SyntaxError(`Invalid ${rule.replace('_', '-')}: ${string}`);
 };
-// validate (faster, it uses regex.test and does not include named capture groups)
+// Compile and test a capture-free grammar for validation.
 const validate = (string, rule) => {
     if (typeof string !== 'string') throw new TypeError(`Invalid ${rule.replace('_', '-')} type: must be a string.`);
-    const profile = schemeProfile(string);
-    const ruleId = profile + rule;
-    if (!patterns.has(ruleId)) patterns.set(ruleId, new RegExp(`^${recursiveCompile(rules(profile), rule)}$`, 'u'));
-    if (patterns.get(ruleId).test(string)) return true;
+    const profile = grammarProfile(string);
+    const cacheKey = profile + rule;
+    if (!patternCache.has(cacheKey)) patternCache.set(cacheKey, new RegExp(`^${recursiveCompile(grammarRules(profile), rule)}$`, 'u'));
+    if (patternCache.get(cacheKey).test(string)) return true;
     throw new SyntaxError(`Invalid ${rule.replace('_', '-')}: ${string}`);
 };
-// compose as per RFC 3986 Section 5.3 (component recomposition)
-function compose(parts = {}) {
+// Serialize scheme, authority, path, query, and fragment slots using RFC 3986 delimiters.
+function composeReference(parts = {}) {
     let result = '';
     if (parts.scheme) result += parts.scheme + ':';
     if (parts.authority !== undefined && parts.authority !== null) result += '//' + parts.authority;
@@ -197,7 +195,8 @@ function compose(parts = {}) {
     if (parts.fragment !== undefined && parts.fragment !== null) result += '#' + parts.fragment;
     return result;
 }
-// remove dot segments algorithm per RFC 3986 Section 5.2.4 (loop and replace)
+// Local abbreviations: idx is an index and seg is a path segment.
+// Remove complete dot segments using the RFC 3986 Section 5.2.4 algorithm.
 function removeDotSegments(path) {
     const output = [];
     let input = path ?? '';
@@ -242,8 +241,9 @@ function removeDotSegments(path) {
     }
     return output.join('');
 }
-// resolve as per RFC https://datatracker.ietf.org/doc/html/rfc3986#section-5.2
-function resolveReference(reference, base, strict = true, parts = false) {
+// RFC 3986 resolution notation: B is the base, R is the reference, and T is the target.
+// Resolve a reference according to RFC 3986 Section 5.2.
+function resolveReference(reference, base, strict = true, returnParts = false) {
     let B;
     if (typeof base === 'string') {
         B = parse(base, 'IRI');
@@ -292,14 +292,14 @@ function resolveReference(reference, base, strict = true, parts = false) {
         }
         T.fragment = R.fragment;
     }
-    if (parts) return T;
-    return compose(T);
+    if (returnParts) return T;
+    return composeReference(T);
 }
 // Convert a complete IRI to fragment-free form without changing its other components.
 function toAbsoluteReference(string) {
     const result = parse(string, 'IRI');
     result.fragment = undefined;
-    return compose(result);
+    return composeReference(result);
 }
 // Generate a relative reference when resolution is stable, otherwise retain the absolute target.
 const toRelativeReference = (target, base) => {
@@ -378,27 +378,27 @@ function normalizePercentEncoding(value, decodeUnreserved = true) {
 }
 // Expand any accepted IPv6 spelling into eight numeric 16-bit fields.
 function parseIPv6Words(address) {
-    let expanded = address;
+    let addressText = address;
     // Convert a dotted-decimal tail to the same two-field representation used by every later step.
-    const lastColon = expanded.lastIndexOf(':');
-    const lastSegment = expanded.slice(lastColon + 1);
+    const lastColon = addressText.lastIndexOf(':');
+    const lastSegment = addressText.slice(lastColon + 1);
     if (lastSegment.includes('.')) {
         const octets = lastSegment.split('.');
-        const high = Number(octets[0]) * 0x100 + Number(octets[1]);
-        const low = Number(octets[2]) * 0x100 + Number(octets[3]);
-        expanded = `${expanded.slice(0, lastColon + 1)}${high.toString(16)}:${low.toString(16)}`;
+        const highWord = Number(octets[0]) * 0x100 + Number(octets[1]);
+        const lowWord = Number(octets[2]) * 0x100 + Number(octets[3]);
+        addressText = `${addressText.slice(0, lastColon + 1)}${highWord.toString(16)}:${lowWord.toString(16)}`;
     }
 
-    const compression = expanded.indexOf('::');
-    const leftText = compression === -1 ? expanded : expanded.slice(0, compression);
-    const rightText = compression === -1 ? '' : expanded.slice(compression + 2);
+    const compressionIndex = addressText.indexOf('::');
+    const leftText = compressionIndex === -1 ? addressText : addressText.slice(0, compressionIndex);
+    const rightText = compressionIndex === -1 ? '' : addressText.slice(compressionIndex + 2);
     const left = leftText ? leftText.split(':') : [];
     const right = rightText ? rightText.split(':') : [];
     const words = [];
     // Retain every explicit field before the compressed zero run.
     for (const field of left) words.push(Number.parseInt(field, 16));
     // Expand the single compression marker to the required number of zero fields.
-    if (compression !== -1) {
+    if (compressionIndex !== -1) {
         // Fill the omitted field count determined from both explicit sides.
         for (let index = left.length + right.length; index < 8; index++) words.push(0);
     }
@@ -428,7 +428,7 @@ function serializeIPv6Words(words) {
     if (bestLength < 2) bestStart = -1;
 
     const fields = [];
-    // Suppress every leading zero by converting each field through its numeric value.
+    // Render each field without leading hexadecimal zeroes.
     for (const word of words) fields.push(word.toString(16));
     if (bestStart === -1) return fields.join(':');
     const before = fields.slice(0, bestStart).join(':');
@@ -440,11 +440,11 @@ function normalizeIPv6Address(address) {
     const words = parseIPv6Words(address);
     // Detect standardized prefixes that identify an embedded IPv4 address from address bits alone.
     const low32 = words[6] * 0x10000 + words[7];
-    const compatible = words[0] === 0 && words[1] === 0 && words[2] === 0 && words[3] === 0 && words[4] === 0 && words[5] === 0 && low32 > 1;
-    const mapped = words[0] === 0 && words[1] === 0 && words[2] === 0 && words[3] === 0 && words[4] === 0 && words[5] === 0xFFFF;
-    const translated = words[0] === 0 && words[1] === 0 && words[2] === 0 && words[3] === 0 && words[4] === 0xFFFF && words[5] === 0;
-    const nat64 = words[0] === 0x64 && words[1] === 0xFF9B && words[2] === 0 && words[3] === 0 && words[4] === 0 && words[5] === 0;
-    if (compatible || mapped || translated || nat64) {
+    const isCompatible = words[0] === 0 && words[1] === 0 && words[2] === 0 && words[3] === 0 && words[4] === 0 && words[5] === 0 && low32 > 1;
+    const isMapped = words[0] === 0 && words[1] === 0 && words[2] === 0 && words[3] === 0 && words[4] === 0 && words[5] === 0xFFFF;
+    const isTranslated = words[0] === 0 && words[1] === 0 && words[2] === 0 && words[3] === 0 && words[4] === 0xFFFF && words[5] === 0;
+    const isWellKnownNat64 = words[0] === 0x64 && words[1] === 0xFF9B && words[2] === 0 && words[3] === 0 && words[4] === 0 && words[5] === 0;
+    if (isCompatible || isMapped || isTranslated || isWellKnownNat64) {
         const prefix = serializeIPv6Words(words.slice(0, 6));
         const ipv4 = `${words[6] >>> 8}.${words[6] & 0xFF}.${words[7] >>> 8}.${words[7] & 0xFF}`;
         return prefix.endsWith(':') ? prefix + ipv4 : `${prefix}:${ipv4}`;
@@ -485,20 +485,20 @@ function normalizeHost(host, mapRegName) {
     if (!mapRegName && isIPv4Address(result)) result = normalizePercentEncoding(encodedResult, false);
     return /[^\x00-\x7F]/u.test(result) ? result : lowercaseAsciiHost(result);
 }
-// Remove an empty or default-valued HTTP or WebSocket port.
+// Omit an empty or default port only for HTTP and WebSocket schemes.
 function normalizePort(scheme, port) {
     if (port === undefined) return undefined;
     const defaultPort = scheme === 'http' || scheme === 'ws' ? '80' : scheme === 'https' || scheme === 'wss' ? '443' : undefined;
     if (defaultPort !== undefined && (port === '' || port.replace(/^0+(?=\d)/, '') === defaultPort)) return undefined;
     return port;
 }
-// Encode each non-ASCII Unicode scalar as uppercase UTF-8 percent triplets.
-function encodeIriComponent(component) {
+// Encode each non-ASCII Unicode scalar as uppercase UTF-8 percent triplets for URI output.
+function encodeNonAsciiForUri(component) {
     // Process complete code points so supplementary characters produce one UTF-8 sequence.
     return component.replace(/[^\x00-\x7F]/gu, (character) => encodeURIComponent(character).toUpperCase());
 }
-// Decode the maximal RFC 3987 URI octet repertoire allowed by one IRI component.
-function decodeUriComponentToIri(component, allowPrivate = false) {
+// Decode the maximal RFC 3987 character repertoire allowed by one IRI component.
+function decodeUriTextToIri(component, allowPrivateUse = false) {
     let result = '';
     // Inspect each normalized percent triplet as either ASCII or the lead of one strict UTF-8 scalar.
     for (let index = 0; index < component.length; index++) {
@@ -514,28 +514,28 @@ function decodeUriComponentToIri(component, allowPrivate = false) {
             continue;
         }
         const sequenceLength = octet >= 0xC2 && octet <= 0xDF ? 2 : octet >= 0xE0 && octet <= 0xEF ? 3 : octet >= 0xF0 && octet <= 0xF4 ? 4 : 0;
-        let encoded = '';
+        let encodedSequence = '';
         // Collect exactly one candidate scalar without consuming malformed trailing input.
         for (let sequenceIndex = 0; sequenceIndex < sequenceLength; sequenceIndex++) {
             const position = index + sequenceIndex * 3;
             if (component[position] !== '%' || !/^[0-9A-F]{2}$/.test(component.slice(position + 1, position + 3))) {
-                encoded = '';
+                encodedSequence = '';
                 break;
             }
-            encoded += component.slice(position, position + 3);
+            encodedSequence += component.slice(position, position + 3);
         }
         let character;
-        if (encoded) {
+        if (encodedSequence) {
             try {
-                character = decodeURIComponent(encoded);
+                character = decodeURIComponent(encodedSequence);
             } catch {
                 character = undefined;
             }
         }
-        const allowed = character !== undefined && !forbiddenIriFormattingPattern.test(character) && (iriUcscharPattern.test(character) || (allowPrivate && iriPrivatePattern.test(character)));
-        if (allowed) {
+        const isAllowedIriCharacter = character !== undefined && !forbiddenIriFormattingPattern.test(character) && (iriUcscharPattern.test(character) || (allowPrivateUse && iriPrivatePattern.test(character)));
+        if (isAllowedIriCharacter) {
             result += character;
-            index += encoded.length - 1;
+            index += encodedSequence.length - 1;
         } else {
             result += `%${hexadecimal}`;
             index += 2;
@@ -543,7 +543,7 @@ function decodeUriComponentToIri(component, allowPrivate = false) {
     }
     return result;
 }
-// Rebuild authority from normalized values while preserving other empty component delimiters.
+// Rebuild authority from normalized userinfo, host, and port while preserving their presence.
 function normalizeAuthority(parts, scheme, mapRegName) {
     if (parts.authority === undefined) return undefined;
     const userinfo = parts.userinfo === undefined ? undefined : normalizePercentEncoding(parts.userinfo);
@@ -566,12 +566,12 @@ function normalizeParsedReference(parts, options = {}) {
     if (parts.nid !== undefined) {
         const rComponent = parts.rComponent === undefined ? undefined : normalizePercentEncoding(parts.rComponent, false);
         const qComponent = parts.qComponent === undefined ? undefined : normalizePercentEncoding(parts.qComponent, false);
-        const query = rComponent !== undefined ? `+${rComponent}${qComponent === undefined ? '' : `?=${qComponent}`}` : qComponent === undefined ? undefined : `=${qComponent}`;
-        return compose({ scheme: parts.scheme.toLowerCase(), path: `${parts.nid.toLowerCase()}:${normalizePercentEncoding(parts.nss, false)}`, query, fragment: parts.fComponent === undefined ? undefined : normalizePercentEncoding(parts.fComponent, false) });
+        const rqComponentText = rComponent !== undefined ? `+${rComponent}${qComponent === undefined ? '' : `?=${qComponent}`}` : qComponent === undefined ? undefined : `=${qComponent}`;
+        return composeReference({ scheme: parts.scheme.toLowerCase(), path: `${parts.nid.toLowerCase()}:${normalizePercentEncoding(parts.nss, false)}`, query: rqComponentText, fragment: parts.fComponent === undefined ? undefined : normalizePercentEncoding(parts.fComponent, false) });
     }
     // Normalize each component independently so encoded delimiters cannot become structure.
     const scheme = parts.scheme === undefined ? undefined : parts.scheme.toLowerCase();
-    const normalized = {
+    const normalizedParts = {
         scheme,
         authority: normalizeAuthority(parts, scheme, mapRegName),
         path: normalizePercentEncoding(parts.path),
@@ -579,31 +579,31 @@ function normalizeParsedReference(parts, options = {}) {
         fragment: parts.fragment === undefined ? undefined : normalizePercentEncoding(parts.fragment),
     };
     // Use the slash form defined for an empty HTTP or WebSocket authority path.
-    if (normalized.authority !== undefined && normalized.path === '' && (scheme === 'http' || scheme === 'https' || scheme === 'ws' || scheme === 'wss')) normalized.path = '/';
+    if (normalizedParts.authority !== undefined && normalizedParts.path === '' && (scheme === 'http' || scheme === 'https' || scheme === 'ws' || scheme === 'wss')) normalizedParts.path = '/';
     // Limit dot-segment removal to paths whose standalone interpretation remains stable.
-    const rootlessRelativePath = normalized.scheme === undefined && normalized.authority === undefined && normalized.path.length > 0 && !normalized.path.startsWith('/');
+    const rootlessRelativePath = normalizedParts.scheme === undefined && normalizedParts.authority === undefined && normalizedParts.path.length > 0 && !normalizedParts.path.startsWith('/');
     if (!rootlessRelativePath) {
-        const reducedPath = removeDotSegments(normalized.path);
+        const reducedPath = removeDotSegments(normalizedParts.path);
         // Preserve a no-authority path when reduction would reparse it as an authority.
-        if (normalized.authority !== undefined || !reducedPath.startsWith('//')) normalized.path = reducedPath;
+        if (normalizedParts.authority !== undefined || !reducedPath.startsWith('//')) normalizedParts.path = reducedPath;
     }
-    // Select an explicit target representation only after syntax and scheme normalization is complete.
+    // Select an explicit target representation only after component normalization is complete.
     if (transform === 'URI') {
-        // Map every non-ASCII authority, path, query, and fragment scalar under RFC 3987 URI output.
-        if (normalized.authority !== undefined) normalized.authority = encodeIriComponent(normalized.authority);
-        normalized.path = encodeIriComponent(normalized.path);
-        if (normalized.query !== undefined) normalized.query = encodeIriComponent(normalized.query);
-        if (normalized.fragment !== undefined) normalized.fragment = encodeIriComponent(normalized.fragment);
+        // Percent-encode every non-ASCII authority, path, query, and fragment scalar for URI output.
+        if (normalizedParts.authority !== undefined) normalizedParts.authority = encodeNonAsciiForUri(normalizedParts.authority);
+        normalizedParts.path = encodeNonAsciiForUri(normalizedParts.path);
+        if (normalizedParts.query !== undefined) normalizedParts.query = encodeNonAsciiForUri(normalizedParts.query);
+        if (normalizedParts.fragment !== undefined) normalizedParts.fragment = encodeNonAsciiForUri(normalizedParts.fragment);
     } else if (transform === 'IRI') {
         // Decode valid UTF-8 percent sequences only where the destination component permits their scalar.
-        if (normalized.authority !== undefined) normalized.authority = decodeUriComponentToIri(normalized.authority);
-        normalized.path = decodeUriComponentToIri(normalized.path);
-        if (normalized.query !== undefined) normalized.query = decodeUriComponentToIri(normalized.query, true);
-        if (normalized.fragment !== undefined) normalized.fragment = decodeUriComponentToIri(normalized.fragment);
+        if (normalizedParts.authority !== undefined) normalizedParts.authority = decodeUriTextToIri(normalizedParts.authority);
+        normalizedParts.path = decodeUriTextToIri(normalizedParts.path);
+        if (normalizedParts.query !== undefined) normalizedParts.query = decodeUriTextToIri(normalizedParts.query, true);
+        if (normalizedParts.fragment !== undefined) normalizedParts.fragment = decodeUriTextToIri(normalizedParts.fragment);
     }
-    return compose(normalized);
+    return composeReference(normalizedParts);
 }
-// export
+// Expose the public validation, parsing, resolution, and conversion API.
 module.exports = {
     isUUID: (string) => validate(string, 'UUID'),
     isUUIDv4: (string) => validate(string, 'UUID_v4'),

@@ -1,6 +1,6 @@
 # URI and IRI normalization
 
-Parsed URI and IRI results expose `normalize()` for syntax-based normalization, the implemented HTTP, HTTPS, WS, WSS, and URN scheme rules, and optional RFC 3987 URI/IRI representation transformation. The method returns a string and leaves the parsed components unchanged.
+Parsed URI and IRI results expose `normalize()` for generic syntax normalization, scheme-specific HTTP and WebSocket forms, the separate RFC 8141 URN normalization path, and optional RFC 3987 URI/IRI representation transformation. The method returns a string and leaves the parsed components unchanged.
 
 ## API
 
@@ -44,13 +44,13 @@ parsed.path;
 // /%7e/a/../b
 ```
 
-## RFC syntax normalization
+## Generic URI and IRI syntax normalization
 
 | Behavior | Implementation | Source |
 | --- | --- | --- |
 | Case normalization | Lowercase the scheme and an ASCII-only host. Uppercase hexadecimal letters in percent triplets. | [RFC 3986 §6.2.2.1](https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1), [RFC 3987 §5.3.2.1](https://www.rfc-editor.org/rfc/rfc3987#section-5.3.2.1) |
-| Percent-encoded unreserved characters | For generic URI/IRI components, decode percent triplets representing ASCII letters, digits, `-`, `.`, `_`, or `~`. Retain percent encoding for reserved octets. URNs use the non-decoding rules below. | [RFC 3986 §§2.2–2.4 and 6.2.2.2](https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.2), [RFC 3987 §5.3.2.3](https://www.rfc-editor.org/rfc/rfc3987#section-5.3.2.3) |
-| Path segments | Apply the RFC dot-segment algorithm where a generic parsed reference can be normalized independently. Preserve unresolved rootless-relative path semantics and every URN NSS segment. | [RFC 3986 §§5.2.4 and 6.2.2.3](https://www.rfc-editor.org/rfc/rfc3986#section-5.2.4), [RFC 3987 §5.3.2.4](https://www.rfc-editor.org/rfc/rfc3987#section-5.3.2.4), [RFC 8141 §§2.2 and 3.1](https://www.rfc-editor.org/rfc/rfc8141#section-3.1) |
+| Percent-encoded unreserved characters | Decode percent triplets representing ASCII letters, digits, `-`, `.`, `_`, or `~`. Retain percent encoding for reserved octets. | [RFC 3986 §§2.2–2.4 and 6.2.2.2](https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.2), [RFC 3987 §5.3.2.3](https://www.rfc-editor.org/rfc/rfc3987#section-5.3.2.3) |
+| Path segments | Apply the RFC dot-segment algorithm where a parsed generic reference can be normalized independently. Preserve unresolved rootless-relative path semantics. | [RFC 3986 §§5.2.4 and 6.2.2.3](https://www.rfc-editor.org/rfc/rfc3986#section-5.2.4), [RFC 3987 §5.3.2.4](https://www.rfc-editor.org/rfc/rfc3987#section-5.3.2.4) |
 | Component recomposition | Emit authority, query, and fragment delimiters from component presence, including present-empty components. | [RFC 3986 §5.3](https://www.rfc-editor.org/rfc/rfc3986#section-5.3) |
 | IPv6 text | Suppress leading zeroes, compress the longest zero run with first-run tie breaking, and use lowercase hexadecimal. Known embedded-IPv4 forms use mixed notation. | [RFC 5952 §§4–5](https://www.rfc-editor.org/rfc/rfc5952#section-4) |
 | IRI-to-URI output | With `transform: 'URI'`, encode non-ASCII authority, path, query, and fragment characters as uppercase UTF-8 percent triplets. | [RFC 3987 §3.1](https://www.rfc-editor.org/rfc/rfc3987#section-3.1) |
@@ -58,31 +58,9 @@ parsed.path;
 
 Without a mapper, normalization retains the parser's host classification as an IP literal, IPv4 address, or registered name. IPvFuture literals use generic host case normalization. Existing non-ASCII IRI host text is retained unless the registered-name mapper supplies another value.
 
-## URNs
+## Scheme-specific normalization
 
-A parsed value under the case-insensitive `urn` scheme takes a separate RFC 8141 normalization path using its captured `scheme`, `nid`, `nss`, `rComponent`, `qComponent`, and `fComponent` properties.
-
-| Input component | Output | Source |
-| --- | --- | --- |
-| Scheme | Convert `urn` to lowercase. | [RFC 8141 §3.1](https://www.rfc-editor.org/rfc/rfc8141#section-3.1) |
-| NID | Convert ASCII letters to lowercase. | [RFC 8141 §§2.1 and 3.1](https://www.rfc-editor.org/rfc/rfc8141#section-3.1) |
-| NSS | Uppercase hexadecimal letters in percent triplets without decoding any octet. Preserve literal case, slash structure, and dot segments. | [RFC 8141 §§2.2 and 3.1](https://www.rfc-editor.org/rfc/rfc8141#section-3.1) |
-| r-, q-, and f-components | Retain the components and their delimiters, uppercasing hexadecimal letters in percent triplets without decoding. | [RFC 8141 §2.3](https://www.rfc-editor.org/rfc/rfc8141#section-2.3), [RFC 3986 §6.2.2.1](https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1) |
-
-```js
-const { parseUri } = require('identifier-js');
-
-parseUri('URN:EXAMPLE:a%62/./b/../C?+r%2f?=q%2f#f%2f').normalize();
-// urn:example:a%62/./b/../C?+r%2F?=q%2F#f%2F
-```
-
-RFC 8141 URNs remain ASCII, including when parsed through an IRI operation. Consequently, `transform: 'URI'` and `transform: 'IRI'` produce the same URN representation, and `mapRegName` is not called because a URN has no authority or registered-name host.
-
-For a parsed URN, the current scheme-specific fields are the normalization input. The NSS and optional-component values stay opaque except for percent-triplet letter case. The method leaves every property unchanged.
-
-Normalization is not a URN-equivalence API. RFC 8141 equivalence compares the normalized assigned-name and ignores r-, q-, and f-components; namespace definitions can add further equivalence rules. This method instead retains those optional components in its returned string. The package does not implement generic or namespace-specific URN-equivalence comparison.
-
-## HTTP and HTTPS
+### HTTP and HTTPS
 
 For `http` and `https`, normalization applies the generic rules and these scheme rules:
 
@@ -101,7 +79,7 @@ https://example.com:00443/a          → https://example.com/a
 http://example.com:/a                → http://example.com/a
 ```
 
-## WS and WSS
+### WS and WSS
 
 For `ws` and `wss`, normalization applies the generic rules and these scheme rules:
 
@@ -118,11 +96,35 @@ wss://example.com:00443/chat         → wss://example.com/chat
 ws://example.com?channel=updates     → ws://example.com/?channel=updates
 ```
 
+### URNs
+
+A parsed value under the case-insensitive `urn` scheme takes the separate RFC 8141 normalization path using its captured `scheme`, `nid`, `nss`, `rComponent`, `qComponent`, and `fComponent` properties.
+
+| Input component | Output | Source |
+| --- | --- | --- |
+| Scheme | Convert `urn` to lowercase. | [RFC 8141 §3.1](https://www.rfc-editor.org/rfc/rfc8141#section-3.1) |
+| NID | Convert ASCII letters to lowercase. | [RFC 8141 §§2.1 and 3.1](https://www.rfc-editor.org/rfc/rfc8141#section-3.1) |
+| NSS | Uppercase hexadecimal letters in percent triplets without decoding any octet. Preserve literal case, slash structure, and dot segments. | [RFC 8141 §§2.2 and 3.1](https://www.rfc-editor.org/rfc/rfc8141#section-3.1) |
+| r-, q-, and f-components | Retain the components and their delimiters, uppercasing hexadecimal letters in percent triplets without decoding. | [RFC 8141 §2.3](https://www.rfc-editor.org/rfc/rfc8141#section-2.3), [RFC 3986 §6.2.2.1](https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1) |
+
+```js
+const { parseUri } = require('identifier-js');
+
+parseUri('URN:EXAMPLE:a%62/./b/../C?+r%2f?=q%2f#f%2f').normalize();
+// urn:example:a%62/./b/../C?+r%2F?=q%2F#f%2F
+```
+
+RFC 8141 URNs remain ASCII, including when parsed through an IRI operation. Consequently, `transform: 'URI'` and `transform: 'IRI'` produce the same URN representation, and `mapRegName` is not called because a URN has no authority or registered-name host.
+
+For a parsed URN, the current URN-specific fields are the normalization input. The NSS and optional-component values stay opaque except for percent-triplet letter case. The method leaves every property unchanged.
+
+Normalization is not a URN-equivalence API. RFC 8141 equivalence compares the normalized assigned name and ignores r-, q-, and f-components; namespace definitions can add further equivalence rules. This method instead retains those optional components in its returned string. The package does not implement generic or namespace-specific URN-equivalence comparison.
+
 ## Registered-name mapping and representation transformation
 
 For a non-empty registered-name host, `options.mapRegName` is called once with the current host spelling before built-in normalization. IP literals, IPv4 addresses, absent hosts, and empty hosts bypass the mapper.
 
-The mapper owns the returned text and all registered-name validation, representation, and host-kind policy. This package enforces only the declared string return type. It does not check whether mapper output is non-empty, remains a registered name, introduces component delimiters, resembles an IP address, or satisfies a scheme-specific hostname grammar. The returned string then receives percent-triplet and ASCII host-case normalization. Mapper exceptions propagate unchanged.
+The mapper owns the returned text and all registered-name validation, representation, and host-kind policy. This package enforces only the declared string return type. It does not check whether mapper output is non-empty, remains a registered name, introduces component delimiters, resembles an IP address, or satisfies the DNS-host grammar. The returned string then receives percent-triplet and ASCII host-case normalization. Mapper exceptions propagate unchanged.
 
 ```js
 const mapped = parseIriReference('x://example').normalize({
@@ -155,7 +157,7 @@ ACE-to-Unicode and Unicode-to-ACE registered-name conversion remain application 
 
 ## Verification
 
-The normalization suite covers URI and IRI parser results, component presence, percent triplets, dot segments, host kinds, RFC 5952 output, HTTP and WebSocket scheme rules, registered-name mapping, both RFC representation transformations, malformed UTF-8 retention, component-specific Unicode repertoires, component non-mutation, round trips, and idempotence.
+The normalization suite covers generic URI and IRI parser results, RFC 8141 URNs, component presence, percent triplets, dot segments, host kinds, RFC 5952 output, HTTP and WebSocket scheme rules, registered-name mapping, both RFC representation transformations, malformed UTF-8 retention, component-specific Unicode repertoires, component non-mutation, round trips, and idempotence.
 
 ```sh
 npm test
