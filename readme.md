@@ -10,7 +10,7 @@ description: RFC 3986/3987 URI and IRI parsing, validation, normalization, resol
 
 `identifier-js` is a URI/IRI parser, validator, normalizer, resolver, and reference converter based on RFC [3986](https://www.rfc-editor.org/rfc/rfc3986) and RFC [3987](https://www.rfc-editor.org/rfc/rfc3987). Those generic standards are the foundation of every URI and IRI operation in the package.
 
-RFC 3986 [§1.1.1](https://www.rfc-editor.org/rfc/rfc3986#section-1.1.1) defines URI syntax as a federated and extensible system: the generic grammar supplies the common syntax, and each URI scheme can further restrict identifiers that use it. This package follows that relationship. Generic URI and IRI grammar is the default; recognized schemes apply any implemented grammar and normalization rules that are specific to them. HTTP(S), WS(S), `file`, and `urn` all sit at this scheme-specific layer, although they specialize different parts of the generic syntax.
+RFC 3986 [§1.1.1](https://www.rfc-editor.org/rfc/rfc3986#section-1.1.1) defines URI syntax as a federated and extensible system: the generic grammar supplies the common syntax, and each URI scheme can further restrict identifiers that use it. This package follows that relationship. Generic URI and IRI grammar is the default; recognized schemes apply any implemented grammar and normalization rules that are specific to them. `http(s)`, `ws(s)`, `file`, and `urn` all sit at this scheme-specific layer, although they specialize different parts of the generic syntax.
 
 It provides:
 
