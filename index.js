@@ -1,6 +1,6 @@
 'use strict';
-// Validate UUIDs and parse, validate, normalize, resolve, and convert RFC 3986 URI, RFC 3987 IRI, and RFC 8141 URN references.
-// A valid URI is always a valid IRI, subject to every implemented scheme's more specific grammar.
+// Validate UUIDs and parse, validate, normalize, resolve, and convert RFC 3986 URI and RFC 3987 IRI references.
+// Apply implemented scheme grammar without changing the generic URI/IRI component model.
 const { recursiveCompile } = require('url-templates');
 const patternCache = new Map();
 const dnsHostSchemesPattern = '(?:[hH][tT][tT][pP][sS]?|[wW][sS][sS]?|[fF][iI][lL][eE])';
@@ -79,24 +79,23 @@ const iriRules = {
     iprivate: '[\\uE000-\\uF8FF\\u{F0000}-\\u{FFFFD}\\u{100000}-\\u{10FFFD}]',
     ucschar: '[\\xA0-\\uD7FF\\uF900-\\uFDCF\\uFDF0-\\uFFEF\\u{10000}-\\u{1FFFD}\\u{20000}-\\u{2FFFD}\\u{30000}-\\u{3FFFD}\\u{40000}-\\u{4FFFD}\\u{50000}-\\u{5FFFD}\\u{60000}-\\u{6FFFD}\\u{70000}-\\u{7FFFD}\\u{80000}-\\u{8FFFD}\\u{90000}-\\u{9FFFD}\\u{A0000}-\\u{AFFFD}\\u{B0000}-\\u{BFFFD}\\u{C0000}-\\u{CFFFD}\\u{D0000}-\\u{DFFFD}\\u{E1000}-\\u{EFFFD}]',
 };
-// Define a closed RFC 8141 profile whose root overrides and direct fragment expression expose only URN captures.
+// Define the closed RFC 8141 scheme grammar using generic URI/IRI component boundaries.
 const urnRules = {
     scheme: '[uU][rR][nN]',
     URI_reference: '{URI}',
-    URI: '{namestring}',
-    absolute_URI: '{assigned_name}(?:{rq_components})?',
+    URI: '{scheme}:{path}(?:\\?{query})?(?:#{fragment})?',
+    absolute_URI: '{scheme}:{path}(?:\\?{query})?',
     IRI_reference: '{IRI}',
     IRI: '{URI}',
     absolute_IRI: '{absolute_URI}',
-    namestring: '{assigned_name}(?:{rq_components})?(?:#{f_component})?',
-    assigned_name: '{scheme}:{NID}:{NSS}',
+    path: '{NID}:{NSS}',
+    query: '(?:[+]{r_component}(?:[?]={q_component})?|={q_component})',
+    fragment: uriRules.fragment,
     NID: '{alpha_digit}{ldh}{0,30}{alpha_digit}',
     ldh: '(?:{alpha_digit}|-)',
     NSS: '{pchar}(?:{pchar}|\/)*',
-    rq_components: '(?:[?][+]{r_component})?(?:[?]={q_component})?',
     r_component: '{pchar}(?:{pchar}|\/|[?](?!=))*',
     q_component: '{pchar}(?:{pchar}|\/|[?])*',
-    f_component: uriRules.fragment,
 };
 // Compile character-repertoire checks used during URI/IRI percent-encoding normalization.
 const uriUnreservedPattern = new RegExp(`^${commonRules.unreserved}$`);
@@ -134,6 +133,7 @@ const captureGroupNames = {
     iuserinfo: 'userinfo',
     iquery: 'query',
     ifragment: 'fragment',
+    path: 'path',
     path_abempty: 'path',
     path_absolute: 'path',
     path_noscheme: 'path',
@@ -144,15 +144,10 @@ const captureGroupNames = {
     ipath_noscheme: 'path',
     ipath_rootless: 'path',
     ipath_empty: 'path',
-    NID: 'nid',
-    NSS: 'nss',
-    r_component: 'rComponent',
-    q_component: 'qComponent',
-    f_component: 'fComponent',
 };
 // Detect schemes whose registered names use the DNS-host grammar.
 const usesDnsHostRules = (string) => new RegExp('^' + dnsHostSchemesPattern + ':').test(string);
-// Grammar profiles: '' is generic, 's' uses DNS-host rules, 'f' permits an empty file host, and 'u' is URN.
+// Grammar profiles: '' is generic, 's' uses DNS-host rules, 'f' permits an empty file host, and 'u' uses URN scheme rules.
 const grammarProfile = (string) => (string.slice(0, 4).toLowerCase() === 'urn:' ? 'u' : string.slice(0, 8).toLowerCase() === 'file:///' ? 'f' : usesDnsHostRules(string) ? 's' : '');
 // Select and merge the rules for the active grammar profile.
 const grammarRules = (profile) => Object.assign({}, commonRules, uriRules, iriRules, profile === 'u' ? urnRules : profile === 'f' ? emptyFileHostRules : profile ? dnsHostRules : {});
@@ -160,7 +155,7 @@ const grammarRules = (profile) => Object.assign({}, commonRules, uriRules, iriRu
 const parse = (string, rule) => {
     if (typeof string !== 'string') throw new TypeError(`Invalid ${rule.replace('_', '-')} type: must be a string.`);
     const profile = grammarProfile(string);
-    // Wrap each public component production in its associated named capture.
+    // Wrap each public generic component production in its associated named capture.
     const addNamedCapture = (key) => (captureGroupNames[key] ? `(?<${captureGroupNames[key]}>${grammarRules(profile)[key]})` : grammarRules(profile)[key]);
     const cacheKey = '_' + profile + rule;
     if (!patternCache.has(cacheKey)) patternCache.set(cacheKey, new RegExp(`^${recursiveCompile(grammarRules(profile), rule, addNamedCapture)}$`, 'u'));
@@ -176,7 +171,7 @@ const parse = (string, rule) => {
     }
     throw new SyntaxError(`Invalid ${rule.replace('_', '-')}: ${string}`);
 };
-// Compile and test a capture-free grammar for validation.
+// Compile and test generic syntax or the tighter grammar of an implemented scheme.
 const validate = (string, rule) => {
     if (typeof string !== 'string') throw new TypeError(`Invalid ${rule.replace('_', '-')} type: must be a string.`);
     const profile = grammarProfile(string);
@@ -241,6 +236,8 @@ function removeDotSegments(path) {
     }
     return output.join('');
 }
+// Identify the URN scheme when selecting operations that have scheme-specific behavior.
+const isUrn = (parts) => parts.scheme?.toLowerCase() === 'urn';
 // RFC 3986 resolution notation: B is the base, R is the reference, and T is the target.
 // Resolve a reference according to RFC 3986 Section 5.2.
 function resolveReference(reference, base, strict = true, returnParts = false) {
@@ -251,6 +248,7 @@ function resolveReference(reference, base, strict = true, returnParts = false) {
         B = Object.assign({}, base);
     }
     if (!B.scheme) throw new Error('Expected an URI/IRI (with scheme) as base.');
+    if (isUrn(B)) throw new Error('URN reference resolution is not supported.');
 
     let R;
     if (typeof reference === 'string') {
@@ -258,6 +256,7 @@ function resolveReference(reference, base, strict = true, returnParts = false) {
     } else {
         R = Object.assign({}, reference);
     }
+    if (isUrn(R)) throw new Error('URN reference resolution is not supported.');
 
     let T;
     if (R.scheme && (strict || R.scheme.toLowerCase() !== B.scheme.toLowerCase())) {
@@ -298,6 +297,7 @@ function resolveReference(reference, base, strict = true, returnParts = false) {
 // Convert a complete IRI to fragment-free form without changing its other components.
 function toAbsoluteReference(string) {
     const result = parse(string, 'IRI');
+    if (isUrn(result)) throw new Error('URN reference conversion is not supported.');
     result.fragment = undefined;
     return composeReference(result);
 }
@@ -305,6 +305,8 @@ function toAbsoluteReference(string) {
 const toRelativeReference = (target, base) => {
     const B = parse(base, 'absolute_IRI');
     const T = parse(target, 'IRI');
+    // Keep URN names outside generic hierarchical reference conversion.
+    if (isUrn(B) || isUrn(T)) throw new Error('URN reference conversion is not supported.');
     // Use the absolute target when dot-segment processing makes lexical relative round trips unstable.
     if (/(?:^|\/)\.{1,2}(?=\/|$)/.test(T.path) || /(?:^|\/)\.{1,2}(?=\/|$)/.test(B.path)) return target;
     if (T.scheme !== B.scheme || T.authority !== B.authority) return target;
@@ -562,15 +564,16 @@ function normalizeParsedReference(parts, options = {}) {
     const { transform, mapRegName } = options;
     if (transform !== undefined && transform !== 'URI' && transform !== 'IRI') throw new TypeError('Invalid transform option: must be "URI" or "IRI".');
     if (mapRegName !== undefined && typeof mapRegName !== 'function') throw new TypeError('Invalid registered-name mapper type: must be a function.');
-    // Normalize captured URN fields without applying generic path or representation processing.
-    if (parts.nid !== undefined) {
-        const rComponent = parts.rComponent === undefined ? undefined : normalizePercentEncoding(parts.rComponent, false);
-        const qComponent = parts.qComponent === undefined ? undefined : normalizePercentEncoding(parts.qComponent, false);
-        const rqComponentText = rComponent !== undefined ? `+${rComponent}${qComponent === undefined ? '' : `?=${qComponent}`}` : qComponent === undefined ? undefined : `=${qComponent}`;
-        return composeReference({ scheme: parts.scheme.toLowerCase(), path: `${parts.nid.toLowerCase()}:${normalizePercentEncoding(parts.nss, false)}`, query: rqComponentText, fragment: parts.fComponent === undefined ? undefined : normalizePercentEncoding(parts.fComponent, false) });
+    const scheme = parts.scheme === undefined ? undefined : parts.scheme.toLowerCase();
+    // Interpret validated generic components according to URN normalization rules.
+    if (scheme === 'urn') {
+        const nidEnd = parts.path.indexOf(':');
+        const path = `${parts.path.slice(0, nidEnd).toLowerCase()}:${normalizePercentEncoding(parts.path.slice(nidEnd + 1), false)}`;
+        const query = parts.query === undefined ? undefined : normalizePercentEncoding(parts.query, false);
+        const fragment = parts.fragment === undefined ? undefined : normalizePercentEncoding(parts.fragment, false);
+        return composeReference({ scheme, path, query, fragment });
     }
     // Normalize each component independently so encoded delimiters cannot become structure.
-    const scheme = parts.scheme === undefined ? undefined : parts.scheme.toLowerCase();
     const normalizedParts = {
         scheme,
         authority: normalizeAuthority(parts, scheme, mapRegName),

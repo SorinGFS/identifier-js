@@ -1,6 +1,6 @@
 # URI and IRI normalization
 
-Parsed URI and IRI results expose `normalize()` for generic syntax normalization, scheme-specific HTTP and WebSocket forms, the separate RFC 8141 URN normalization path, and optional RFC 3987 URI/IRI representation transformation. The method returns a string and leaves the parsed components unchanged.
+Parsed URI and IRI results expose `normalize()` for generic syntax normalization, scheme-specific HTTP, WebSocket, and URN forms, and optional RFC 3987 URI/IRI representation transformation. The method returns a string and leaves the parsed components unchanged.
 
 ## API
 
@@ -98,7 +98,7 @@ ws://example.com?channel=updates     → ws://example.com/?channel=updates
 
 ### URNs
 
-A parsed value under the case-insensitive `urn` scheme takes the separate RFC 8141 normalization path using its captured `scheme`, `nid`, `nss`, `rComponent`, `qComponent`, and `fComponent` properties.
+A parsed value under the case-insensitive `urn` scheme takes the RFC 8141 normalization path using its generic `scheme`, `path`, `query`, and `fragment` properties. The `path` contains `NID:NSS`; the `query` retains any r- and q-component introducers and values; and the `fragment` contains the f-component.
 
 | Input component | Output | Source |
 | --- | --- | --- |
@@ -128,7 +128,7 @@ This example demonstrates each URN normalization rule:
 
 RFC 8141 URNs remain ASCII, including when parsed through an IRI operation. Consequently, `transform: 'URI'` and `transform: 'IRI'` produce the same URN representation, and `mapRegName` is not called because a URN has no authority or registered-name host.
 
-For a parsed URN, the current URN-specific fields are the normalization input. The NSS and optional-component values stay opaque except for percent-triplet letter case. The method leaves every property unchanged.
+For a parsed URN, syntax validation occurs during parsing and the current generic component fields are the normalization input. Normalization derives the NID and NSS boundary from the first `:` in `path`; NSS, query, and fragment values stay opaque except for percent-triplet letter case. The method leaves every property unchanged.
 
 Normalization is not a URN-equivalence API. RFC 8141 equivalence compares the normalized assigned name and ignores r-, q-, and f-components; namespace definitions can add further equivalence rules. This method instead retains those optional components in its returned string. The package does not implement generic or namespace-specific URN-equivalence comparison.
 

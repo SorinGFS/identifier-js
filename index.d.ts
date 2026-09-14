@@ -90,17 +90,6 @@ export type AbsoluteIdentifierComponents = {
     query?: string;
 };
 
-type UrnIdentifierComponents = {
-    scheme: string;
-    nid: string;
-    nss: string;
-    rComponent?: string;
-    qComponent?: string;
-    fComponent?: string;
-};
-
-type AbsoluteUrnIdentifierComponents = Omit<UrnIdentifierComponents, 'fComponent'>;
-
-export type ParsedIdentifierComponents = (IdentifierComponents | UrnIdentifierComponents) & NormalizableReference;
-export type ParsedRelativeIdentifierComponents = (RelativeIdentifierComponents | UrnIdentifierComponents) & NormalizableReference;
-export type ParsedAbsoluteIdentifierComponents = (AbsoluteIdentifierComponents | AbsoluteUrnIdentifierComponents) & NormalizableReference;
+export type ParsedIdentifierComponents = IdentifierComponents & NormalizableReference;
+export type ParsedRelativeIdentifierComponents = RelativeIdentifierComponents & NormalizableReference;
+export type ParsedAbsoluteIdentifierComponents = AbsoluteIdentifierComponents & NormalizableReference;

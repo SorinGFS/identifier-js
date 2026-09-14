@@ -2,17 +2,21 @@
 
 title: Identifier JS
 
-description: RFC 3986/3987 URI and IRI tools with RFC 8141 URN grammar and normalization support.
+description: RFC 3986/3987 URI and IRI parsing, validation, normalization, resolution, and reference conversion.
 
 ---
 
 # Identifier JS
 
-`identifier-js` is a URI/IRI parser, validator, normalizer, resolver, and reference converter based on RFC [3986](https://www.rfc-editor.org/rfc/rfc3986) and RFC [3987](https://www.rfc-editor.org/rfc/rfc3987), with an RFC [8141](https://www.rfc-editor.org/rfc/rfc8141) URN grammar profile. HTTP, WebSocket, and `file` identifiers use the documented DNS-host grammar where applicable. It provides:
+`identifier-js` is a URI/IRI parser, validator, normalizer, resolver, and reference converter based on RFC [3986](https://www.rfc-editor.org/rfc/rfc3986) and RFC [3987](https://www.rfc-editor.org/rfc/rfc3987). Those generic standards are the foundation of every URI and IRI operation in the package.
 
-- URI and IRI validation, including RFC 8141 URN namestring syntax;
-- parsed generic URI/IRI components and URN-specific components;
-- conservative syntax normalization, scheme-specific forms, and a registered-name extension point;
+RFC 3986 [§1.1.1](https://www.rfc-editor.org/rfc/rfc3986#section-1.1.1) defines URI syntax as a federated and extensible system: the generic grammar supplies the common syntax, and each URI scheme can further restrict identifiers that use it. This package follows that relationship. Generic URI and IRI grammar is the default; recognized schemes apply any implemented grammar and normalization rules that are specific to them. HTTP(S), WS(S), `file`, and `urn` all sit at this scheme-specific layer, although they specialize different parts of the generic syntax.
+
+It provides:
+
+- URI and IRI validation and parsing through generic or applicable scheme-specific grammar;
+- a consistent generic component model across URI and IRI schemes;
+- conservative syntax normalization, implemented scheme-specific forms, and a registered-name extension point;
 - RFC 3986 reference resolution and dot-segment removal;
 - relative-reference generation with resolution round-trip guarantees for supported forms;
 - UUID and UUIDv4 lexical validation;
@@ -84,7 +88,7 @@ console.log(parseUri('https://user@example.com:8443/a?b#c'));
 // }
 ```
 
-Absent optional components are returned as `undefined`. Present but empty query and fragment components are returned as empty strings.
+Absent optional components read as `undefined`. Present but empty query and fragment components are returned as empty strings.
 
 </details>
 
@@ -173,7 +177,7 @@ console.log(resolveReference('?page=2', 'https://example.com/items?page=1#curren
 
 Empty authorities, queries, and fragments are preserved during recomposition.
 
-`resolveReference` does not apply when either input uses the `urn` scheme. URN resolution services are outside this package's scope.
+`resolveReference` rejects a base or reference using the `urn` scheme. URN resolution services are outside this package's scope.
 
 </details>
 
@@ -203,7 +207,7 @@ console.log(relative); // ../images/logo.svg
 
 When no safe rootless relative form can round-trip to the target, `toRelativeReference` returns the absolute target. Different schemes or authorities also return the target unchanged. Complete dot segments in either path also trigger this fallback because RFC resolution removes them. For those inputs, resolving the result produces the same identifier as resolving the target directly; lexical dot-segment spelling is not preserved.
 
-`toAbsoluteReference` and `toRelativeReference` do not apply when an input uses the `urn` scheme. Relative-URN semantics are outside this package's scope.
+`toAbsoluteReference` and `toRelativeReference` reject inputs using the `urn` scheme. Relative-URN semantics are outside this package's scope.
 
 </details>
 
@@ -278,29 +282,29 @@ console.log(isUUIDv4('123e4567-e89b-42d3-9456-426614174000')); // true
 
 ## Processing model
 
-The parser builds its validation logic from declarative RFC grammar fragments:
+The parser builds its validation logic from declarative RFC grammar fragments. The requested operation establishes the outer RFC 3986 URI or RFC 3987 IRI syntax, and recognized schemes apply tighter syntax where implemented. The selected grammar directly captures its applicable generic components:
 
-1. Select the generic, DNS-host, empty-file-host, or URN grammar profile.
-2. Merge and recursively expand grammar references through `url-templates`.
-3. Add named captures for the public components exposed by parsing.
-4. Compile the complete expression with Unicode support.
-5. Cache expressions by operation, grammar rule, and grammar profile.
-6. Validate with `RegExp.test()` or parse with `RegExp.exec()`.
+1. Select the URI or IRI root required by the requested operation.
+2. Select generic, DNS-host, empty-file-host, or `urn` scheme rules as applicable.
+3. Merge and recursively expand grammar references through `url-templates`.
+4. Compile with named generic-component captures for parsing or without captures for validation.
+5. Cache the expression by operation, grammar rule, and grammar profile.
+6. Execute the complete expression with Unicode support.
 7. Resolve references by component inheritance, path merging, dot-segment removal, and component recomposition.
 
 <details>
 <summary><strong>Lazy compilation and cache behavior</strong></summary>
 
-Parsing and validation use separate cached expressions because parsing requires named groups and validation does not. Each grammar profile also uses separate entries.
+Parsing and validation use separate cached expressions because parsing requires named groups and validation does not. Each grammar profile uses separate entries.
 
-The first call for an operation, grammar rule, and grammar profile includes recursive grammar expansion and regular-expression compilation. Later calls reuse the cached expression and are considerably faster. No regular expressions are generated during package import.
+The first call for an operation, grammar rule, and syntax selection includes recursive grammar expansion and regular-expression compilation. Later calls reuse the cached expression and are considerably faster. No regular expressions are generated during package import.
 
 </details>
 
 <details>
-<summary><strong>DNS-host grammar profile</strong></summary>
+<summary><strong>HTTP, WebSocket, and file scheme grammar</strong></summary>
 
-The following schemes trigger DNS-style ASCII or Unicode label rules instead of the generic `reg-name` grammar:
+At the scheme-specific layer, the following schemes replace the generic `reg-name` production with DNS-style ASCII or Unicode label rules:
 
 - `http`
 - `https`
@@ -315,9 +319,9 @@ Parsing validates DNS-style label shape and the selected RFC 3987 Unicode charac
 </details>
 
 <details>
-<summary><strong>URN grammar profile</strong></summary>
+<summary><strong>urn scheme grammar</strong></summary>
 
-URNs use the existing URI and IRI operations because a URN is a URI under the `urn` scheme. Values with a case-insensitive `urn:` prefix select the closed RFC 8141 grammar profile; no separate `isUrn` or `parseUrn` API is exported.
+RFC 8141 defines a URN as a URI assigned under the `urn` URI scheme, and its namestring grammar conforms to the enclosing URI syntax. Values with a case-insensitive `urn:` prefix select the closed RFC 8141 grammar, which validates the scheme syntax while capturing the generic URI or IRI component boundaries.
 
 ```text
 urn:NID:NSS[?+r-component][?=q-component][#f-component]
@@ -333,17 +337,15 @@ console.log(isUri(value)); // true
 console.log(isIri(value)); // true
 
 const parsed = parseUri(value);
-console.log(parsed.scheme);     // URN
-console.log(parsed.nid);        // Example
-console.log(parsed.nss);        // a%2f/../B
-console.log(parsed.rComponent); // service?x
-console.log(parsed.qComponent); // key=value
-console.log(parsed.fComponent); // part
+console.log(parsed.scheme);   // URN
+console.log(parsed.path);     // Example:a%2f/../B
+console.log(parsed.query);    // +service?x?=key=value
+console.log(parsed.fragment); // part
 console.log(parsed.normalize());
 // urn:example:a%2F/../B?+service?x?=key=value#part
 ```
 
-URN parse results expose `nid`, `nss`, `rComponent`, `qComponent`, and `fComponent`. They do not expose generic `authority`, `userinfo`, `host`, `port`, `path`, `query`, or `fragment` fields. To require a URN after parsing a value accepted as a general URI, check `parsed.scheme.toLowerCase() === 'urn'`.
+The generic `path` contains the RFC 8141 `NID:NSS` text, the generic `query` contains the r- and q-components with their introducers, and the generic `fragment` contains the f-component. To require a URN after parsing a value accepted as a general URI, check `parsed.scheme.toLowerCase() === 'urn'`.
 
 URNs remain ASCII even through the IRI operations. Callers representing non-ASCII names must first encode them as UTF-8 and then percent-encode the resulting octets; lexical validation does not decode or verify those octet sequences.
 
@@ -461,9 +463,10 @@ RFC 9562 lists database keys, filenames, system identifiers, and transaction ide
 <details>
 <summary><strong>Validation and parsing</strong></summary>
 
-- The generic URI grammar profile follows RFC 3986 character and component syntax; HTTP, WebSocket, and `file` schemes select the documented DNS-host rules.
-- The generic IRI grammar profile follows the RFC 3987 Unicode extensions to URI syntax; HTTP, WebSocket, and `file` schemes select the documented DNS-host rules.
-- Values with the case-insensitive `urn` scheme select the closed RFC 8141 grammar profile and expose `nid`, `nss`, `rComponent`, `qComponent`, and `fComponent` fields through the URI and IRI parsers.
+- RFC 3986 URI syntax and the RFC 3987 Unicode extensions provide the generic grammar used by every URI and IRI operation.
+- Following RFC 3986's federated syntax model, generic grammar handles other valid schemes while implemented schemes can further restrict or specialize their identifiers.
+- HTTP, WebSocket, and `file` schemes replace generic registered-name syntax with the documented DNS-host rules where applicable.
+- The `urn` scheme uses a closed RFC 8141 grammar that captures `scheme`, `path`, `query`, and `fragment`.
 - URN validation establishes generic lexical syntax only, not namespace registration, namespace-specific syntax, assignment, resolution, or equivalence.
 - Validators return `true` or throw at the first grammar violation.
 - `absolute-URI` and `absolute-IRI` use the fragment-free grammar defined by their RFCs; complete URI and IRI operations accept fragments.
@@ -481,7 +484,7 @@ RFC 9562 lists database keys, filenames, system identifiers, and transaction ide
 - `toAbsoluteReference` removes the fragment from an identifier containing a scheme.
 - `toRelativeReference` generates a reference whose RFC resolution equals the target resolution for supported forms.
 - `normalize()` implements the applicable case, percent-encoding, and path-segment rules from RFC 3986 §§6.2.2.1–6.2.2.3 and RFC 3987 §§5.3.2.1, 5.3.2.3–5.3.2.4, RFC 3987 §§3.1–3.2 URI/IRI representation transformation, RFC 5952 IPv6 text, RFC 9110 HTTP(S) port/path forms, RFC 6455 WS(S) port/resource-name forms, and RFC 8141 scheme/NID/percent-triplet normalization without NSS decoding or path reduction.
-- Reference resolution and absolute/relative reference conversion do not apply to `urn` inputs; RFC 8141 URN resolution services and URN-equivalence APIs are not implemented.
+- Reference resolution and absolute/relative reference conversion reject `urn` inputs; RFC 8141 URN resolution services and URN-equivalence APIs are outside the implemented API.
 
 </details>
 
@@ -521,7 +524,7 @@ Run `gh workspace-data load` again to refresh materialized data after public-dat
 
 ### Tests
 
-The active suite contains 3,157 tests covering URI/IRI validation and parsing, RFC 8141 URN syntax and normalization, generic normalization, bidirectional URI/IRI representation transformation, DNS-host grammar, IPv4, IPv6, IPvFuture, ports, UUIDs, RFC 3986 resolution examples, empty components, absolute conversion, and relative-reference round trips, including 2,646 generated combinations of target/base paths, query-presence states, and target-fragment states across equivalent URI and IRI families.
+The active suite contains 3,154 tests covering URI/IRI validation and generic component parsing, implemented scheme grammar and normalization, bidirectional URI/IRI representation transformation, DNS-host grammar, IPv4, IPv6, IPvFuture, ports, UUIDs, RFC 3986 resolution examples, empty components, absolute conversion, and relative-reference round trips, including 2,646 generated combinations of target/base paths, query-presence states, and target-fragment states across equivalent URI and IRI families.
 
 <details>
 <summary><strong>Test details</strong></summary>
