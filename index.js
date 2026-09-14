@@ -103,12 +103,12 @@ const iriUcscharPattern = new RegExp(`^${iriRules.ucschar}$`, 'u');
 const iriPrivatePattern = new RegExp(`^${iriRules.iprivate}$`, 'u');
 // Apply the additional RFC 3987 Section 4.1 prose restriction outside the ABNF repertoire.
 const forbiddenIriFormattingPattern = /^[\u200E\u200F\u202A-\u202E]$/u;
-// Restrict registered names for selected hierarchical schemes to DNS-style labels.
+// Restrict selected schemes to DNS-style labels while accepting RFC 3986 §3.2.2 terminal root separators.
 const dnsHostRules = {
     scheme: dnsHostSchemesPattern,
-    reg_name: '(?:(?=.{1,255}(?:[:/?#]|$))(?:{a_label})(?:\\.{a_label})*)',
+    reg_name: '(?:(?=.{1,253}\\.?(?:[:/?#]|$))(?:{a_label})(?:\\.{a_label})*\\.?)',
     a_label: '(?:{alpha_digit})(?:(?:{alpha_digit}|-){0,61}(?:{alpha_digit}))?',
-    ireg_name: '(?:(?=.{1,255}(?:[:/?#]|$))(?:{u_label})(?:{u_separator}(?:{u_label}))*)',
+    ireg_name: '(?:(?=.{1,253}(?:{u_separator})?(?:[:/?#]|$))(?:{u_label})(?:{u_separator}(?:{u_label}))*(?:{u_separator})?)',
     u_label: '(?:{u_char})(?:(?:{u_char}|-){0,61}(?:{u_char}))?',
     u_separator: '[\\x2E\\uFF0E\\u3002\\uFF61]',
     u_char: '[\\p{L}\\p{N}\\p{Mn}\\p{Mc}\\u200C\\u200D\\u00B7\\u0375\\u30FB\\u05F3\\u05F4]',

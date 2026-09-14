@@ -205,7 +205,7 @@ const relative = toRelativeReference(target, base);
 console.log(relative); // ../images/logo.svg
 ```
 
-When no safe rootless relative form can round-trip to the target, `toRelativeReference` returns the absolute target. Different schemes or authorities also return the target unchanged. Complete dot segments in either path also trigger this fallback because RFC resolution removes them. For those inputs, resolving the result produces the same identifier as resolving the target directly; lexical dot-segment spelling is not preserved.
+When no safe rootless relative form can round-trip to the target, `toRelativeReference` returns the absolute target. Different schemes or authorities also produce the absolute target verbatim. Complete dot segments in either path also trigger this fallback because RFC resolution removes them. For those inputs, resolving the result produces the same identifier as resolving the target directly; lexical dot-segment spelling is not preserved.
 
 `toAbsoluteReference` and `toRelativeReference` reject inputs using the `urn` scheme. Relative-URN semantics are outside this package's scope.
 
@@ -213,7 +213,7 @@ When no safe rootless relative form can round-trip to the target, `toRelativeRef
 
 ### Normalize parsed URI and IRI references
 
-Every URI and IRI parse result provides an optional, non-enumerable `normalize()` method. Parsing remains usable by itself; normalization runs only when the method is called and returns a string without modifying the parsed components.
+Every URI and IRI parse result provides an optional, non-enumerable `normalize()` method. Parsing works independently; normalization runs only when the method is called and returns a string without modifying the parsed components.
 
 <details>
 <summary><strong>API and examples</strong></summary>
@@ -249,9 +249,9 @@ Normalization implements RFC 3986 and RFC 3987 syntax normalization for scheme a
 
 URN normalization lowercases the scheme and NID, uppercases percent-triplet hexadecimal letters without decoding, and preserves NSS case, slashes, and dot segments. The r-, q-, and f-components are retained, so normalized-string equality is not the RFC 8141 URN-equivalence procedure. Namespace-specific equivalence and URN resolution are outside this package's scope. URI/IRI transformation and registered-name mapping options do not alter authority-free, ASCII-only URNs.
 
-For a non-empty registered-name host, `mapRegName` receives the current host spelling before built-in normalization. The mapper exclusively owns validation, representation, and host-kind policy for its returned string. Apart from enforcing the declared string return type, this package does not check whether mapper output is non-empty, remains a registered name, introduces delimiters, resembles an IP address, or satisfies the DNS-host grammar.
+For a non-empty registered-name host, `mapRegName` receives the current host spelling, including any terminal DNS root separator, before built-in normalization. The mapper exclusively owns validation, representation, and host-kind policy for its returned string. Apart from enforcing the declared string return type, this package does not check whether mapper output is non-empty, is a registered name, introduces delimiters, resembles an IP address, or satisfies the DNS-host grammar.
 
-With `transform: 'URI'`, non-ASCII userinfo, mapper output, path, query, and fragment text becomes uppercase UTF-8 percent triplets under RFC 3987 §3.1. With `transform: 'IRI'`, eligible percent-encoded ASCII unreserved characters and strictly legal UTF-8 sequences become IRI characters under RFC 3987 §3.2; reserved, malformed, disallowed, and non-UTF-8 octets remain encoded. Private-use characters are decoded only in queries, and forbidden bidirectional formatting characters remain encoded. A mapper can supply the desired Unicode or ASCII hostname representation; this package does not enforce that policy or validate the complete normalized result.
+With `transform: 'URI'`, non-ASCII userinfo, mapper output, path, query, and fragment text becomes uppercase UTF-8 percent triplets under RFC 3987 §3.1. With `transform: 'IRI'`, eligible percent-encoded ASCII unreserved characters and strictly legal UTF-8 sequences become IRI characters under RFC 3987 §3.2; reserved, malformed, disallowed, and non-UTF-8 octets are retained in percent-encoded form. Private-use characters are decoded only in queries, and forbidden bidirectional formatting characters are retained in percent-encoded form. A mapper can supply the desired Unicode or ASCII hostname representation; this package does not enforce that policy or validate the complete normalized result.
 
 See [`normalization.md`](normalization.md) for the exact RFC section mapping and examples.
 
@@ -312,9 +312,11 @@ At the scheme-specific layer, the following schemes replace the generic `reg-nam
 - `wss`
 - `file`
 
-Matching is case-insensitive. Other valid schemes use generic RFC 3986/3987 registered-name syntax. RFC 8089's empty `file` authority is accepted when followed by an absolute path, as in `file:///path`; empty hosts remain rejected for HTTP and WebSocket schemes.
+Matching is case-insensitive. Other valid schemes use generic RFC 3986/3987 registered-name syntax. RFC 8089's empty `file` authority is accepted when followed by an absolute path, as in `file:///path`; empty hosts are invalid for HTTP and WebSocket schemes.
 
-Parsing validates DNS-style label shape and the selected RFC 3987 Unicode character classes. A registered-name mapper runs later during optional normalization, and its returned string is not submitted to the DNS-host grammar again.
+In accordance with RFC 3986 §3.2.2, the URI grammar accepts one terminal U+002E as the DNS root marker. The IRI grammar accepts one terminal U+002E, U+FF0E, U+3002, or U+FF61 separator and retains its original spelling during parsing and generic normalization. Root-only, leading, and consecutive separators are invalid. The optional root marker is outside the 253-octet ASCII DNS presentation limit derived from RFC 1034 §3.1.
+
+Parsing validates DNS-style label shape and the selected RFC 3987 Unicode character classes. Unicode character counts do not establish the resulting ACE wire length; a registered-name mapper runs later during optional normalization and owns complete IDNA and DNS validation. Its returned string is not submitted to the DNS-host grammar again.
 
 </details>
 
@@ -347,7 +349,7 @@ console.log(parsed.normalize());
 
 The generic `path` contains the RFC 8141 `NID:NSS` text, the generic `query` contains the r- and q-components with their introducers, and the generic `fragment` contains the f-component. To require a URN after parsing a value accepted as a general URI, check `parsed.scheme.toLowerCase() === 'urn'`.
 
-URNs remain ASCII even through the IRI operations. Callers representing non-ASCII names must first encode them as UTF-8 and then percent-encode the resulting octets; lexical validation does not decode or verify those octet sequences.
+URN syntax is ASCII in both URI and IRI operations. Callers representing non-ASCII names must first encode them as UTF-8 and then percent-encode the resulting octets; lexical validation does not decode or verify those octet sequences.
 
 Validation is deliberately lexical and namespace-independent. Success does not prove that an NID is registered or otherwise legitimate, that an NSS obeys a namespace's additional syntax and canonicalization rules, or that the name was legitimately assigned.
 
@@ -479,7 +481,7 @@ RFC 9562 lists database keys, filenames, system identifiers, and transaction ide
 <summary><strong>Resolution, conversion, and normalization</strong></summary>
 
 - `resolveReference` implements RFC 3986 §5 component inheritance, path merging, dot-segment removal, and recomposition for URI and IRI text.
-- An empty reference path inherits the base path unchanged.
+- An empty reference path inherits the base path verbatim.
 - `strict = false` implements RFC 3986 §5.2.2 backward-compatible same-scheme handling.
 - `toAbsoluteReference` removes the fragment from an identifier containing a scheme.
 - `toRelativeReference` generates a reference whose RFC resolution equals the target resolution for supported forms.
@@ -516,7 +518,7 @@ gh workspace-data init
 gh workspace-data load
 ```
 
-The extension materializes ordinary local files under `#/public/tests/`, `#/public/benchmarks/`, and `#/public/docs/`, while `#/version-layers.js` provides common deterministic version-layer discovery. The generated `#/` namespace remains excluded from the canonical Git repository and npm package.
+The extension materializes ordinary local files under `#/public/tests/`, `#/public/benchmarks/`, and `#/public/docs/`, while `#/version-layers.js` provides common deterministic version-layer discovery. The generated `#/` namespace is excluded from the canonical Git repository and npm package.
 
 Run `gh workspace-data load` again to refresh materialized data after public-data changes or an extension upgrade.
 
@@ -524,7 +526,7 @@ Run `gh workspace-data load` again to refresh materialized data after public-dat
 
 ### Tests
 
-The active suite contains 3,154 tests covering URI/IRI validation and generic component parsing, implemented scheme grammar and normalization, bidirectional URI/IRI representation transformation, DNS-host grammar, IPv4, IPv6, IPvFuture, ports, UUIDs, RFC 3986 resolution examples, empty components, absolute conversion, and relative-reference round trips, including 2,646 generated combinations of target/base paths, query-presence states, and target-fragment states across equivalent URI and IRI families.
+The active suite contains 3,158 tests covering URI/IRI validation and generic component parsing, implemented scheme grammar and normalization, bidirectional URI/IRI representation transformation, DNS-host grammar and terminal root separators, IPv4, IPv6, IPvFuture, ports, UUIDs, RFC 3986 resolution examples, empty components, absolute conversion, and relative-reference round trips, including 2,646 generated combinations of target/base paths, query-presence states, and target-fragment states across equivalent URI and IRI families.
 
 <details>
 <summary><strong>Test details</strong></summary>

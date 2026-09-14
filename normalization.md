@@ -1,6 +1,6 @@
 # URI and IRI normalization
 
-Parsed URI and IRI results expose `normalize()` for generic syntax normalization, scheme-specific HTTP, WebSocket, and URN forms, and optional RFC 3987 URI/IRI representation transformation. The method returns a string and leaves the parsed components unchanged.
+Parsed URI and IRI results expose `normalize()` for generic syntax normalization, scheme-specific HTTP, WebSocket, and URN forms, and optional RFC 3987 URI/IRI representation transformation. The method returns a string without modifying the parsed components.
 
 ## API
 
@@ -56,7 +56,7 @@ parsed.path;
 | IRI-to-URI output | With `transform: 'URI'`, encode non-ASCII authority, path, query, and fragment characters as uppercase UTF-8 percent triplets. | [RFC 3987 §3.1](https://www.rfc-editor.org/rfc/rfc3987#section-3.1) |
 | URI-to-IRI output | With `transform: 'IRI'`, decode percent-encoded ASCII unreserved characters and strictly legal UTF-8 sequences permitted in each destination component. Retain reserved, malformed, disallowed, and non-UTF-8 octets. | [RFC 3987 §3.2](https://www.rfc-editor.org/rfc/rfc3987#section-3.2) |
 
-Without a mapper, normalization retains the parser's host classification as an IP literal, IPv4 address, or registered name. IPvFuture literals use generic host case normalization. Existing non-ASCII IRI host text is retained unless the registered-name mapper supplies another value.
+Without a mapper, normalization retains the parser's host classification as an IP literal, IPv4 address, or registered name. IPvFuture literals use generic host case normalization. Non-ASCII IRI host text is retained unless the registered-name mapper supplies another value.
 
 ## Scheme-specific normalization
 
@@ -121,22 +121,24 @@ This example demonstrates each URN normalization rule:
 
 - `URN` becomes `urn` because the scheme is case-insensitive and normalized to lowercase.
 - `EXAMPLE` becomes `example` because ASCII letters in the NID are normalized to lowercase.
-- `%62` remains encoded in the NSS rather than becoming `b`; URN normalization does not decode percent-encoded NSS octets.
-- `/./b/../C` remains unchanged because the NSS is opaque to generic path processing: dot segments are not removed, and literal NSS case is preserved.
+- `%62` is retained in encoded form in the NSS rather than becoming `b`; URN normalization does not decode percent-encoded NSS octets.
+- `/./b/../C` is preserved because the NSS is opaque to generic path processing: dot segments are not removed, and literal NSS case is preserved.
 - The r-, q-, and f-components and their `?+`, `?=`, and `#` delimiters are retained.
 - `%2f` becomes `%2F` in each optional component because retained percent triplets use uppercase hexadecimal letters without decoding the represented `/`.
 
-RFC 8141 URNs remain ASCII, including when parsed through an IRI operation. Consequently, `transform: 'URI'` and `transform: 'IRI'` produce the same URN representation, and `mapRegName` is not called because a URN has no authority or registered-name host.
+RFC 8141 URN syntax is ASCII in both URI and IRI parsing operations. Consequently, `transform: 'URI'` and `transform: 'IRI'` produce the same URN representation, and `mapRegName` is not called because a URN has no authority or registered-name host.
 
-For a parsed URN, syntax validation occurs during parsing and the current generic component fields are the normalization input. Normalization derives the NID and NSS boundary from the first `:` in `path`; NSS, query, and fragment values stay opaque except for percent-triplet letter case. The method leaves every property unchanged.
+For a parsed URN, syntax validation occurs during parsing and the current generic component fields are the normalization input. Normalization derives the NID and NSS boundary from the first `:` in `path`; NSS, query, and fragment values stay opaque except for percent-triplet letter case. The method does not modify any property.
 
 Normalization is not a URN-equivalence API. RFC 8141 equivalence compares the normalized assigned name and ignores r-, q-, and f-components; namespace definitions can add further equivalence rules. This method instead retains those optional components in its returned string. The package does not implement generic or namespace-specific URN-equivalence comparison.
 
 ## Registered-name mapping and representation transformation
 
-For a non-empty registered-name host, `options.mapRegName` is called once with the current host spelling before built-in normalization. IP literals, IPv4 addresses, absent hosts, and empty hosts bypass the mapper.
+For a non-empty registered-name host, `options.mapRegName` is called once with the current host spelling, including any terminal DNS root separator, before built-in normalization. IP literals, IPv4 addresses, absent hosts, and empty hosts bypass the mapper.
 
-The mapper owns the returned text and all registered-name validation, representation, and host-kind policy. This package enforces only the declared string return type. It does not check whether mapper output is non-empty, remains a registered name, introduces component delimiters, resembles an IP address, or satisfies the DNS-host grammar. The returned string then receives percent-triplet and ASCII host-case normalization. Mapper exceptions propagate unchanged.
+Generic normalization preserves a terminal DNS root marker. URI hosts use U+002E; an IRI host can retain U+002E, U+FF0E, U+3002, or U+FF61 until the mapper selects its application representation. For example, an IDNA mapper can convert every accepted separator to U+002E while producing ACE labels.
+
+The mapper owns the returned text and all registered-name validation, representation, and host-kind policy. This package enforces only the declared string return type. It does not check whether mapper output is non-empty, is a registered name, introduces component delimiters, resembles an IP address, or satisfies the DNS-host grammar. The returned string then receives percent-triplet and ASCII host-case normalization. Mapper exceptions propagate without modification.
 
 ```js
 const mapped = parseIriReference('x://example').normalize({
@@ -151,7 +153,7 @@ The example deliberately produces text that is not a valid URI or IRI; validatin
 
 ### IRI-to-URI transformation
 
-With `transform: 'URI'`, retained reserved and non-ASCII percent triplets remain encoded, and literal non-ASCII userinfo, mapper output, path, query, and fragment text becomes uppercase UTF-8 percent triplets. A mapper can supply an ASCII hostname when its consuming scheme requires one; this package does not validate mapper output against that scheme.
+With `transform: 'URI'`, reserved and non-ASCII percent triplets are preserved in encoded form, and literal non-ASCII userinfo, mapper output, path, query, and fragment text becomes uppercase UTF-8 percent triplets. A mapper can supply an ASCII hostname when its consuming scheme requires one; this package does not validate mapper output against that scheme.
 
 ```js
 const { parseIri } = require('identifier-js');
@@ -169,12 +171,12 @@ This example demonstrates each relevant output rule:
 - `😀` is processed as one Unicode scalar and becomes its four UTF-8 octets `%F0%9F%98%80`.
 - `資料` becomes `%E8%B3%87%E6%96%99` in the query.
 - The query's private-use character `\uE000` becomes `%EE%80%80`.
-- The literal reserved `/` remains literal because it is already valid URI query syntax.
-- The existing encoded sequence `%c3%a9` remains encoded while its hexadecimal letters become uppercase as `%C3%A9`.
+- The literal reserved `/` is preserved because it is valid URI query syntax.
+- The input sequence `%c3%a9` is preserved in encoded form while its hexadecimal letters become uppercase as `%C3%A9`.
 
 ### URI-to-IRI transformation
 
-With `transform: 'IRI'`, conversion uses UTF-8 exclusively and decodes as many eligible percent-encoded characters as possible. Encoded reserved characters, `%25`, malformed or incomplete UTF-8, legacy character encodings, Unicode outside the RFC 3987 component repertoire, and forbidden bidirectional formatting characters remain percent encoded. Private-use characters are decoded only in the query component. The hexadecimal letters of retained triplets are uppercase.
+With `transform: 'IRI'`, conversion uses UTF-8 exclusively and decodes as many eligible percent-encoded characters as possible. Encoded reserved characters, `%25`, malformed or incomplete UTF-8, legacy character encodings, Unicode outside the RFC 3987 component repertoire, and forbidden bidirectional formatting characters are preserved in percent-encoded form. Private-use characters are decoded only in the query component. The hexadecimal letters of retained triplets are uppercase.
 
 ```js
 const { parseUri } = require('identifier-js');
@@ -189,17 +191,17 @@ output;
 This example shows why transformation is not equivalent to applying `decodeURIComponent()` to every triplet:
 
 - `%C3%A9` becomes `é` because it is valid UTF-8 for a character permitted in an IRI path.
-- `%2F` remains encoded because `/` is reserved and decoding it could change path structure.
-- `%25` remains encoded because decoding it would introduce a literal percent sign.
-- `%C3%28` remains encoded because it is malformed UTF-8.
-- `%E2%82` remains encoded because it is an incomplete UTF-8 sequence.
-- `%E9` remains encoded because a Latin-1 or Windows-1252 byte is not valid UTF-8 by itself.
-- `%EF%B7%90` remains encoded because it represents U+FDD0, which is outside the RFC 3987 character repertoire.
-- `%E2%80%8E` remains encoded because it represents U+200E, a forbidden bidirectional formatting character.
+- `%2F` is preserved in encoded form because `/` is reserved and decoding it could change path structure.
+- `%25` is preserved in encoded form because decoding it would introduce a literal percent sign.
+- `%C3%28` is preserved in encoded form because it is malformed UTF-8.
+- `%E2%82` is preserved in encoded form because it is an incomplete UTF-8 sequence.
+- `%E9` is preserved in encoded form because a Latin-1 or Windows-1252 byte is not valid UTF-8 by itself.
+- `%EF%B7%90` is preserved in encoded form because it represents U+FDD0, which is outside the RFC 3987 character repertoire.
+- `%E2%80%8E` is preserved in encoded form because it represents U+200E, a forbidden bidirectional formatting character.
 
 The IRI transformation decodes percent-encoded ASCII unreserved characters even when this changes a registered name into IPv4-looking text. Without an explicit transformation, normalization preserves that registered-name host classification.
 
-ACE-to-Unicode and Unicode-to-ACE registered-name conversion remain application policy. `mapRegName` runs before the selected representation transformation, so applications can provide the appropriate mapping in either direction.
+ACE-to-Unicode and Unicode-to-ACE registered-name conversion is application policy. `mapRegName` runs before the selected representation transformation, so applications can provide the appropriate mapping in either direction.
 
 ## Verification
 
