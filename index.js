@@ -1,7 +1,7 @@
 'use strict';
 // Validate UUIDs and parse, validate, normalize, resolve, and convert RFC 3986 URI and RFC 3987 IRI references.
 // Apply implemented scheme grammar without changing the generic URI/IRI component model.
-const { recursiveCompile } = require('url-templates');
+const { recursiveCompileUrlTemplate } = require('url-templates');
 const patternCache = new Map();
 const dnsHostSchemesPattern = '(?:[hH][tT][tT][pP][sS]?|[wW][sS][sS]?|[fF][iI][lL][eE])';
 // Define shared RFC 3986/3987 productions and helper productions used by UUID and scheme-specific grammars.
@@ -158,7 +158,7 @@ const parse = (string, rule) => {
     // Wrap each public generic component production in its associated named capture.
     const addNamedCapture = (key) => (captureGroupNames[key] ? `(?<${captureGroupNames[key]}>${grammarRules(profile)[key]})` : grammarRules(profile)[key]);
     const cacheKey = '_' + profile + rule;
-    if (!patternCache.has(cacheKey)) patternCache.set(cacheKey, new RegExp(`^${recursiveCompile(grammarRules(profile), rule, addNamedCapture)}$`, 'u'));
+    if (!patternCache.has(cacheKey)) patternCache.set(cacheKey, new RegExp(`^${recursiveCompileUrlTemplate(grammarRules(profile), rule, addNamedCapture)}$`, 'u'));
     const match = patternCache.get(cacheKey).exec(string);
     if (match) {
         Object.defineProperty(match.groups, 'normalize', {
@@ -176,7 +176,7 @@ const validate = (string, rule) => {
     if (typeof string !== 'string') throw new TypeError(`Invalid ${rule.replace('_', '-')} type: must be a string.`);
     const profile = grammarProfile(string);
     const cacheKey = profile + rule;
-    if (!patternCache.has(cacheKey)) patternCache.set(cacheKey, new RegExp(`^${recursiveCompile(grammarRules(profile), rule)}$`, 'u'));
+    if (!patternCache.has(cacheKey)) patternCache.set(cacheKey, new RegExp(`^${recursiveCompileUrlTemplate(grammarRules(profile), rule)}$`, 'u'));
     if (patternCache.get(cacheKey).test(string)) return true;
     throw new SyntaxError(`Invalid ${rule.replace('_', '-')}: ${string}`);
 };
