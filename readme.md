@@ -538,7 +538,7 @@ npm install
 npm test
 ```
 
-The suite uses the `node:test` module built into Node.js and requires no separate test-runner dependency. Its deterministic dispatcher delegates version-layer selection, numbered-fixture traversal, and explicit concern discovery to the `gh-workspace-data v0.7.4` runtime. Each concern suite heading includes its package-root-relative `#/public/tests/<concern>/index.js` source path. The materialized `#/public/tests/README.md` documents fixture discovery, version eligibility, ordering, callback configuration, and suite registration.
+The suite uses the `node:test` module built into Node.js and requires no separate test-runner dependency. Its deterministic dispatcher delegates version-layer selection, numbered-fixture traversal, and explicit concern discovery to the `gh-workspace-data v0.8.0` runtime. Each concern suite heading includes its package-root-relative `#/public/tests/<concern>/index.js` source path. The materialized `#/public/tests/README.md` documents fixture discovery, version eligibility, ordering, callback configuration, and suite registration.
 
 `npm test` exits unsuccessfully when configuration, fixture loading, suite registration, or a test fails. Continuous integration runs the suite on Node.js 24 and 26 across Ubuntu, Windows, and macOS.
 
@@ -569,7 +569,7 @@ Direct invocation also supports an explicit iteration count; `npm run benchmark`
 node ./#/public/benchmarks --iterations 250000
 ```
 
-The generic coordinator delegates version-layer selection and ordered concern discovery to the `gh-workspace-data v0.7.4` runtime. The materialized `#/public/benchmarks/README.md` documents concern registration, version eligibility, workload controls, measurement semantics, output fields, and guidance for interpreting results from noisy CI runners.
+The generic coordinator delegates version-layer selection and ordered concern discovery to the `gh-workspace-data v0.8.0` runtime. The materialized `#/public/benchmarks/README.md` documents concern registration, version eligibility, workload controls, measurement semantics, output fields, and guidance for interpreting results from noisy CI runners.
 
 </details>
 
