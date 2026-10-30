@@ -58,6 +58,21 @@ parsed.path;
 
 Without a mapper, normalization retains the parser's host classification as an IP literal, IPv4 address, or registered name. IPvFuture literals use generic host case normalization. Non-ASCII IRI host text is retained unless the registered-name mapper supplies another value.
 
+## Path-form preservation
+
+Generic URI/IRI path normalization applies percent normalization before RFC dot-segment reduction, so encoded unreserved dots participate in reduction. Rootless-relative paths retain their standalone semantics. When reduction would expose leading `//` in a no-authority reference or a `file` identifier, normalization retains the pre-reduction, percent-normalized path. This preserves component boundaries and the [file path form](readme.md#file-grammar). Other authority-bearing paths use the reduced form.
+
+```text
+file:///a/../b       → file:///b
+file:///a/..//b      → file:///a/..//b
+file:/a/..//b        → file:/a/..//b
+file:///a/%2e%2e//b  → file:///a/..//b
+x:/a/..//b           → x:/a/..//b
+x:///a/..//b         → x:////b
+```
+
+The retained percent-normalized path keeps its dot segments and repeated slashes. Reference resolution applies RFC merging and dot-segment processing, followed by its separate [file-path boundary check](readme.md#reference-resolution).
+
 ## Scheme-specific normalization
 
 ### HTTP and HTTPS
@@ -205,7 +220,7 @@ ACE-to-Unicode and Unicode-to-ACE registered-name conversion is application poli
 
 ## Verification
 
-The normalization suite covers generic URI and IRI parser results, RFC 8141 URNs, component presence, percent triplets, dot segments, host kinds, RFC 5952 output, HTTP and WebSocket scheme rules, registered-name mapping, both RFC representation transformations, malformed UTF-8 retention, component-specific Unicode repertoires, component non-mutation, round trips, and idempotence.
+The normalization suite covers generic URI and IRI parser results, RFC 8141 URNs, component presence, percent triplets, dot segments, no-authority and file path-form stability, host kinds, RFC 5952 output, HTTP and WebSocket scheme rules, registered-name mapping, both RFC representation transformations, malformed UTF-8 retention, component-specific Unicode repertoires, component non-mutation, round trips, and idempotence.
 
 ```sh
 npm test
@@ -215,6 +230,7 @@ npm test
 
 - [RFC 3986 — Uniform Resource Identifier: Generic Syntax](https://www.rfc-editor.org/rfc/rfc3986)
 - [RFC 3987 — Internationalized Resource Identifiers](https://www.rfc-editor.org/rfc/rfc3987)
+- [RFC 8089 — The `file` URI Scheme](https://www.rfc-editor.org/rfc/rfc8089)
 - [RFC 8141 — Uniform Resource Names](https://www.rfc-editor.org/rfc/rfc8141)
 - [RFC 5952 — A Recommendation for IPv6 Address Text Representation](https://www.rfc-editor.org/rfc/rfc5952)
 - [RFC 6455 — The WebSocket Protocol](https://www.rfc-editor.org/rfc/rfc6455)

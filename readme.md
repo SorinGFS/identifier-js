@@ -147,6 +147,8 @@ console.log(parseIri('https://usér@例え.テスト:8443/résumé?lang=fr#profi
 
 </details>
 
+<a id="reference-resolution"></a>
+
 ### Resolve a reference
 
 Resolve a URI or IRI reference against an absolute base using RFC 3986 §5.
@@ -175,9 +177,15 @@ console.log(resolveReference('?page=2', 'https://example.com/items?page=1#curren
 
 `strict` defaults to `true`. In strict mode, a reference containing a scheme replaces the base identifier even when both schemes are equal. `returnParts` defaults to `false`; when enabled at runtime, the function returns the resolved component object.
 
-Empty authorities, queries, and fragments are preserved during recomposition.
+Empty authorities, queries, and fragments are preserved during recomposition where the selected scheme supports them.
 
-`resolveReference` rejects a base or reference using the `urn` scheme. URN resolution services are outside this package's scope.
+Resolution first checks supported combinations of parsed operands, with the base checked before the reference, including the URN checks below. For an effective `file` reference, the query must be absent; a present authority must be host-only and accompany a path beginning with exactly one slash. Empty queries and ports count as present components; see the [file profile](#file-grammar). Supported operands then follow RFC 3986 §5.2 component inheritance, path merging, and dot-segment transformation.
+
+After calculation, a separate O(1) path-prefix check requires a `file` target path to begin with exactly one slash before either string or parts output. For example, `resolveReference('..//b', 'file:///base/')` throws a plain `Error` because dot-segment processing exposes `//b`. Parsing owns input-text grammar validation and reports malformed text with `SyntaxError`; the operand-combination and calculated-path checks report unsupported operations with plain `Error`. Successful resolution returns the calculated components or their string recomposition.
+
+Valid file operations retain hosted and bracketed-literal authorities, fragments, and internal repeated slashes; explicit non-file schemes retain their own behavior. At runtime, object operands supply components directly, while the declared TypeScript inputs remain strings. The combination checks use raw `authority` as canonical, independently of derived `host`, `userinfo`, or `port` fields. For authority, query, and fragment components, `''` indicates presence, while `null` and `undefined` indicate absence.
+
+`resolveReference` throws `Error` for a base or reference using the `urn` scheme.
 
 </details>
 
@@ -205,9 +213,9 @@ const relative = toRelativeReference(target, base);
 console.log(relative); // ../images/logo.svg
 ```
 
-When no safe rootless relative form can round-trip to the target, `toRelativeReference` returns the absolute target. Different schemes or authorities also produce the absolute target verbatim. Complete dot segments in either path also trigger this fallback because RFC resolution removes them. For those inputs, resolving the result produces the same identifier as resolving the target directly; lexical dot-segment spelling is not preserved.
+`toRelativeReference` converts file identifiers as well as other supported schemes. With matching schemes and authorities, it derives a relative form that can round-trip to the target, falling back to the absolute target when needed. Different schemes or authorities produce the absolute target verbatim. Complete dot segments in either path also trigger this fallback because RFC resolution removes them. For supported resolution combinations, resolving the result produces the same identifier as resolving the target directly; lexical dot-segment spelling is not preserved. Conversion can return a valid absolute target such as `file:///a/..//b`; resolving that target applies dot-segment processing and then the separate [file-path boundary check](#reference-resolution), which rejects the resulting `//b` path.
 
-`toAbsoluteReference` and `toRelativeReference` reject inputs using the `urn` scheme. Relative-URN semantics are outside this package's scope.
+`toAbsoluteReference` and `toRelativeReference` throw `Error` for inputs using the `urn` scheme.
 
 </details>
 
@@ -253,7 +261,7 @@ For a non-empty registered-name host, `mapRegName` receives the current host spe
 
 With `transform: 'URI'`, non-ASCII userinfo, mapper output, path, query, and fragment text becomes uppercase UTF-8 percent triplets under RFC 3987 §3.1. With `transform: 'IRI'`, eligible percent-encoded ASCII unreserved characters and strictly legal UTF-8 sequences become IRI characters under RFC 3987 §3.2; reserved, malformed, disallowed, and non-UTF-8 octets are retained in percent-encoded form. Private-use characters are decoded only in queries, and forbidden bidirectional formatting characters are retained in percent-encoded form. A mapper can supply the desired Unicode or ASCII hostname representation; this package does not enforce that policy or validate the complete normalized result.
 
-See [`normalization.md`](normalization.md) for the exact RFC section mapping and examples.
+See [`normalization.md`](normalization.md) for the exact RFC section mapping and examples, including [path-form preservation](normalization.md#path-form-preservation) for file and no-authority paths.
 
 </details>
 
@@ -285,7 +293,7 @@ console.log(isUUIDv4('123e4567-e89b-42d3-9456-426614174000')); // true
 The parser builds its validation logic from declarative RFC grammar fragments. The requested operation establishes the outer RFC 3986 URI or RFC 3987 IRI syntax, and recognized schemes apply tighter syntax where implemented. The selected grammar directly captures its applicable generic components:
 
 1. Select the URI or IRI root required by the requested operation.
-2. Select generic, DNS-host, empty-file-host, or `urn` scheme rules as applicable.
+2. Select generic, DNS-host, `file`, or `urn` scheme rules as applicable.
 3. Merge and recursively expand grammar references through `url-templates`.
 4. Compile with named generic-component captures for parsing or without captures for validation.
 5. Cache the expression by operation, grammar rule, and grammar profile.
@@ -302,7 +310,7 @@ The first call for an operation, grammar rule, and syntax selection includes rec
 </details>
 
 <details>
-<summary><strong>HTTP, WebSocket, and file scheme grammar</strong></summary>
+<summary><strong>HTTP and WebSocket scheme grammar</strong></summary>
 
 At the scheme-specific layer, the following schemes replace the generic `reg-name` production with DNS-style ASCII or Unicode label rules:
 
@@ -310,13 +318,33 @@ At the scheme-specific layer, the following schemes replace the generic `reg-nam
 - `https`
 - `ws`
 - `wss`
-- `file`
 
-Matching is case-insensitive. Other valid schemes use generic RFC 3986/3987 registered-name syntax. RFC 8089's empty `file` authority is accepted when followed by an absolute path, as in `file:///path`; empty hosts are invalid for HTTP and WebSocket schemes.
+Matching is case-insensitive. Other valid schemes use generic RFC 3986/3987 registered-name syntax, subject to implemented scheme profiles such as [file](#file-grammar). Empty hosts are invalid for HTTP and WebSocket schemes.
 
 In accordance with RFC 3986 §3.2.2, the URI grammar accepts one terminal U+002E as the DNS root marker. The IRI grammar accepts one terminal U+002E, U+FF0E, U+3002, or U+FF61 separator and retains its original spelling during parsing and generic normalization. Root-only, leading, and consecutive separators are invalid. The optional root marker is outside the 253-octet ASCII DNS presentation limit derived from RFC 1034 §3.1.
 
 Parsing validates DNS-style label shape and the selected RFC 3987 Unicode character classes. Unicode character counts do not establish the resulting ACE wire length; a registered-name mapper runs later during optional normalization and owns complete IDNA and DNS validation. Its returned string is not submitted to the DNS-host grammar again.
+
+</details>
+
+<a id="file-grammar"></a>
+
+<details>
+<summary><strong>file scheme grammar</strong></summary>
+
+The case-insensitive `file` profile implements the core grammar of [RFC 8089 §2](https://www.rfc-editor.org/rfc/rfc8089#section-2), with supporting ABNF materialized at `#/public/docs/rfc8089-abnf.yaml` as described under [Verification](#verification). An absolute path is mandatory, with an optional host-only authority:
+
+```text
+file:/path         (absent authority)
+file:///path       (present-empty authority)
+file://host/path   (named authority)
+```
+
+The root `/` is valid in each form. Hosts use generic RFC 3986/3987 registered-name, IPv4, or bracketed IP-literal syntax. An authority contains only the host, including the empty host in `file:///path`. Paths begin with exactly one slash and can contain repeated slashes internally. Complete file identifiers comprise the scheme, optional authority, absolute path, and optional fragment; the absolute-URI and absolute-IRI forms end with the path. URI operations use the RFC 3986 character repertoire; IRI operations use the RFC 3987 repertoire in applicable components.
+
+Parsing and reference operations process identifier text and components. `file:/C:/path` is an absolute URI whose path is `/C:/path`. Reference resolution merges paths lexically: supply a base path ending in `/` for directory-shaped merging; otherwise, merging replaces the final base-path segment.
+
+See the [resolution boundary](#reference-resolution) and [normalization path policy](normalization.md#path-form-preservation) for operation-specific behavior.
 
 </details>
 
@@ -467,12 +495,12 @@ RFC 9562 lists database keys, filenames, system identifiers, and transaction ide
 
 - RFC 3986 URI syntax and the RFC 3987 Unicode extensions provide the generic grammar used by every URI and IRI operation.
 - Following RFC 3986's federated syntax model, generic grammar handles other valid schemes while implemented schemes can further restrict or specialize their identifiers.
-- HTTP, WebSocket, and `file` schemes replace generic registered-name syntax with the documented DNS-host rules where applicable.
+- HTTP and WebSocket schemes apply the documented DNS-host rules; the [file profile](#file-grammar) combines an absolute path, an optional host-only authority using generic host syntax, and an optional fragment.
 - The `urn` scheme uses a closed RFC 8141 grammar that captures `scheme`, `path`, `query`, and `fragment`.
 - URN validation establishes generic lexical syntax only, not namespace registration, namespace-specific syntax, assignment, resolution, or equivalence.
 - Validators return `true` or throw at the first grammar violation.
 - `absolute-URI` and `absolute-IRI` use the fragment-free grammar defined by their RFCs; complete URI and IRI operations accept fragments.
-- Port syntax follows RFC 3986 `port = *DIGIT`, including empty and leading-zero values.
+- For schemes supporting ports, port syntax follows RFC 3986 `port = *DIGIT`, including empty and leading-zero values.
 - Parsing records absent optional components as `undefined` and present-empty components as empty strings.
 
 </details>
@@ -481,7 +509,7 @@ RFC 9562 lists database keys, filenames, system identifiers, and transaction ide
 <summary><strong>Resolution, conversion, and normalization</strong></summary>
 
 - `resolveReference` implements RFC 3986 §5 component inheritance, path merging, dot-segment removal, and recomposition for URI and IRI text.
-- An empty reference path inherits the base path verbatim.
+- An empty reference path inherits the base path verbatim; file operations apply the [component and path checks](#reference-resolution) described above.
 - `strict = false` implements RFC 3986 §5.2.2 backward-compatible same-scheme handling.
 - `toAbsoluteReference` removes the fragment from an identifier containing a scheme.
 - `toRelativeReference` generates a reference whose RFC resolution equals the target resolution for supported forms.
@@ -526,7 +554,7 @@ Run `gh workspace-data load` again to refresh materialized data after public-dat
 
 ### Tests
 
-The active test run contains 3,158 tests across 41 suites covering URI/IRI validation and generic component parsing, implemented scheme grammar and normalization, bidirectional URI/IRI representation transformation, DNS-host grammar and terminal root separators, IPv4, IPv6, IPvFuture, ports, UUIDs, RFC 3986 resolution examples, empty components, absolute conversion, and relative-reference round trips, including 2,646 generated combinations of target/base paths, query-presence states, and target-fragment states across equivalent URI and IRI families.
+The public suite contains **3,192 tests across 43 suites**. It covers URI/IRI validation and generic component parsing, implemented scheme grammar and normalization, bidirectional URI/IRI representation transformation, DNS-host grammar and terminal root separators, IPv4, IPv6, IPvFuture, ports, UUIDs, RFC 3986 resolution examples, empty components, absolute conversion, file grammar and normalization stability, resolver operation boundaries, and relative-reference round trips, including a guarded 2,646-case inverse matrix of generated combinations of target/base paths, query-presence states, and target-fragment states across equivalent URI and IRI families.
 
 <details>
 <summary><strong>Test details</strong></summary>
@@ -538,7 +566,7 @@ npm install
 npm test
 ```
 
-The suite uses the `node:test` module built into Node.js and requires no separate test-runner dependency. Its deterministic dispatcher delegates version-layer selection, numbered-fixture traversal, and explicit concern discovery to the `gh-workspace-data v0.8.0` runtime. Each concern suite heading includes its package-root-relative `#/public/tests/<concern>/index.js` source path. The materialized `#/public/tests/README.md` documents fixture discovery, version eligibility, ordering, callback configuration, and suite registration.
+The suite uses the `node:test` module built into Node.js and requires no separate test-runner dependency. Its deterministic dispatcher delegates version-layer selection, numbered-fixture traversal, and explicit concern discovery to the `gh-workspace-data v0.8.0` runtime. Each concern suite heading includes its package-root-relative `#/public/tests/<concern>/index.js` source path. The materialized `#/public/tests/README.md` documents project coverage, fixture discovery, version eligibility, ordering, callback configuration, and suite registration.
 
 `npm test` exits unsuccessfully when configuration, fixture loading, suite registration, or a test fails. Continuous integration runs the suite on Node.js 24 and 26 across Ubuntu, Windows, and macOS.
 

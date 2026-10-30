@@ -3,7 +3,7 @@
 // Apply implemented scheme grammar without changing the generic URI/IRI component model.
 const { recursiveCompileUrlTemplate } = require('url-templates');
 const patternCache = new Map();
-const dnsHostSchemesPattern = '(?:[hH][tT][tT][pP][sS]?|[wW][sS][sS]?|[fF][iI][lL][eE])';
+const dnsHostSchemesPattern = '(?:[hH][tT][tT][pP][sS]?|[wW][sS][sS]?)';
 // Define shared RFC 3986/3987 productions and helper productions used by UUID and scheme-specific grammars.
 const commonRules = {
     dnsHostSchemesPattern,
@@ -97,6 +97,18 @@ const urnRules = {
     r_component: '{pchar}(?:{pchar}|\/|[?](?!=))*',
     q_component: '{pchar}(?:{pchar}|\/|[?])*',
 };
+// Define the closed RFC 8089 file grammar using generic URI/IRI component boundaries.
+const fileRules = {
+    scheme: '[fF][iI][lL][eE]',
+    URI_reference: '{URI}',
+    absolute_URI: '{scheme}:{hier_part}',
+    hier_part: '(?:\/\/{authority}{path_absolute}|{path_absolute})',
+    authority: '{host}',
+    IRI_reference: '{IRI}',
+    absolute_IRI: '{scheme}:{ihier_part}',
+    ihier_part: '(?:\/\/{iauthority}{ipath_absolute}|{ipath_absolute})',
+    iauthority: '{ihost}',
+};
 // Compile character-repertoire checks used during URI/IRI percent-encoding normalization.
 const uriUnreservedPattern = new RegExp(`^${commonRules.unreserved}$`);
 const iriUcscharPattern = new RegExp(`^${iriRules.ucschar}$`, 'u');
@@ -113,12 +125,6 @@ const dnsHostRules = {
     u_separator: '[\\x2E\\uFF0E\\u3002\\uFF61]',
     u_char: '[\\p{L}\\p{N}\\p{Mn}\\p{Mc}\\u200C\\u200D\\u00B7\\u0375\\u30FB\\u05F3\\u05F4]',
 };
-// Recognize RFC 8089's empty file authority without weakening other scheme host policies.
-const emptyFileHostRules = Object.assign({}, dnsHostRules, {
-    scheme: '[fF][iI][lL][eE]',
-    reg_name: '',
-    ireg_name: '',
-});
 // Map grammar productions to the public named captures returned by parsers.
 const captureGroupNames = {
     scheme: 'scheme',
@@ -148,9 +154,9 @@ const captureGroupNames = {
 // Detect schemes whose registered names use the DNS-host grammar.
 const usesDnsHostRules = (string) => new RegExp('^' + dnsHostSchemesPattern + ':').test(string);
 // Grammar profiles: '' is generic, 's' uses DNS-host rules, 'f' permits an empty file host, and 'u' uses URN scheme rules.
-const grammarProfile = (string) => (string.slice(0, 4).toLowerCase() === 'urn:' ? 'u' : string.slice(0, 8).toLowerCase() === 'file:///' ? 'f' : usesDnsHostRules(string) ? 's' : '');
+const grammarProfile = (string) => (string.slice(0, 4).toLowerCase() === 'urn:' ? 'u' : string.slice(0, 5).toLowerCase() === 'file:' ? 'f' : usesDnsHostRules(string) ? 's' : '');
 // Select and merge the rules for the active grammar profile.
-const grammarRules = (profile) => Object.assign({}, commonRules, uriRules, iriRules, profile === 'u' ? urnRules : profile === 'f' ? emptyFileHostRules : profile ? dnsHostRules : {});
+const grammarRules = (profile) => Object.assign({}, commonRules, uriRules, iriRules, profile === 'u' ? urnRules : profile === 'f' ? fileRules : profile ? dnsHostRules : {});
 // Compile and execute a grammar with named component captures.
 const parse = (string, rule) => {
     if (typeof string !== 'string') throw new TypeError(`Invalid ${rule.replace('_', '-')} type: must be a string.`);
@@ -238,6 +244,28 @@ function removeDotSegments(path) {
 }
 // Identify the URN scheme when selecting operations that have scheme-specific behavior.
 const isUrn = (parts) => parts.scheme?.toLowerCase() === 'urn';
+// Identify file operands without parsing their already-separated components again.
+const isFile = (parts) => parts.scheme?.toLowerCase() === 'file';
+// Recognize the path-absolute prefix without scanning or validating the remaining path.
+const hasAbsolutePathPrefix = (path) => path?.[0] === '/' && path[1] !== '/';
+// Reject unsupported operand combinations while retaining operation-specific diagnostics.
+function assertReferenceCombinationSupported(B, other, operation) {
+    if (isUrn(B) || (other != null && isUrn(other))) throw new Error(`URN reference ${operation} is not supported.`);
+    if (operation !== 'resolution') return;
+    // Ignoring a same-scheme reference in non-strict mode gives the same scheme classification.
+    const parts = other ?? B;
+    if (!isFile(parts.scheme ? parts : B)) return;
+    if (parts.query != null) throw new Error('File reference resolution is not supported for query components.');
+    // Inspect canonical authority for objects without derived fields; bracketed literal colons are not ports.
+    const authority = parts.authority;
+    if (authority != null && (authority.includes('@') || (authority.startsWith('[') ? !authority.endsWith(']') : authority.includes(':')) || !hasAbsolutePathPrefix(parts.path))) throw new Error('File reference resolution is not supported for this authority/path combination.');
+}
+// Reject file paths exposed by RFC merging without reparsing or repairing the computed target.
+function assertFileResolutionPathSupported(parts) {
+    if (isFile(parts) && !hasAbsolutePathPrefix(parts.path)) {
+        throw new Error('File reference resolution is not supported for this base/reference path combination.');
+    }
+}
 // RFC 3986 resolution notation: B is the base, R is the reference, and T is the target.
 // Resolve a reference according to RFC 3986 Section 5.2.
 function resolveReference(reference, base, strict = true, returnParts = false) {
@@ -248,7 +276,7 @@ function resolveReference(reference, base, strict = true, returnParts = false) {
         B = Object.assign({}, base);
     }
     if (!B.scheme) throw new Error('Expected an URI/IRI (with scheme) as base.');
-    if (isUrn(B)) throw new Error('URN reference resolution is not supported.');
+    assertReferenceCombinationSupported(B, undefined, 'resolution');
 
     let R;
     if (typeof reference === 'string') {
@@ -256,7 +284,7 @@ function resolveReference(reference, base, strict = true, returnParts = false) {
     } else {
         R = Object.assign({}, reference);
     }
-    if (isUrn(R)) throw new Error('URN reference resolution is not supported.');
+    assertReferenceCombinationSupported(B, R, 'resolution');
 
     let T;
     if (R.scheme && (strict || R.scheme.toLowerCase() !== B.scheme.toLowerCase())) {
@@ -291,6 +319,7 @@ function resolveReference(reference, base, strict = true, returnParts = false) {
         }
         T.fragment = R.fragment;
     }
+    assertFileResolutionPathSupported(T);
     if (returnParts) return T;
     return composeReference(T);
 }
@@ -306,7 +335,7 @@ const toRelativeReference = (target, base) => {
     const B = parse(base, 'absolute_IRI');
     const T = parse(target, 'IRI');
     // Keep URN names outside generic hierarchical reference conversion.
-    if (isUrn(B) || isUrn(T)) throw new Error('URN reference conversion is not supported.');
+    assertReferenceCombinationSupported(B, T, 'conversion');
     // Use the absolute target when dot-segment processing makes lexical relative round trips unstable.
     if (/(?:^|\/)\.{1,2}(?=\/|$)/.test(T.path) || /(?:^|\/)\.{1,2}(?=\/|$)/.test(B.path)) return target;
     if (T.scheme !== B.scheme || T.authority !== B.authority) return target;
@@ -413,7 +442,7 @@ function serializeIPv6Words(words) {
     let bestStart = -1;
     let bestLength = 0;
     // Select the first longest run containing at least two zero fields.
-    for (let start = 0; start < words.length;) {
+    for (let start = 0; start < words.length; ) {
         if (words[start] !== 0) {
             start++;
             continue;
@@ -443,12 +472,12 @@ function normalizeIPv6Address(address) {
     // Detect standardized prefixes that identify an embedded IPv4 address from address bits alone.
     const low32 = words[6] * 0x10000 + words[7];
     const isCompatible = words[0] === 0 && words[1] === 0 && words[2] === 0 && words[3] === 0 && words[4] === 0 && words[5] === 0 && low32 > 1;
-    const isMapped = words[0] === 0 && words[1] === 0 && words[2] === 0 && words[3] === 0 && words[4] === 0 && words[5] === 0xFFFF;
-    const isTranslated = words[0] === 0 && words[1] === 0 && words[2] === 0 && words[3] === 0 && words[4] === 0xFFFF && words[5] === 0;
-    const isWellKnownNat64 = words[0] === 0x64 && words[1] === 0xFF9B && words[2] === 0 && words[3] === 0 && words[4] === 0 && words[5] === 0;
+    const isMapped = words[0] === 0 && words[1] === 0 && words[2] === 0 && words[3] === 0 && words[4] === 0 && words[5] === 0xffff;
+    const isTranslated = words[0] === 0 && words[1] === 0 && words[2] === 0 && words[3] === 0 && words[4] === 0xffff && words[5] === 0;
+    const isWellKnownNat64 = words[0] === 0x64 && words[1] === 0xff9b && words[2] === 0 && words[3] === 0 && words[4] === 0 && words[5] === 0;
     if (isCompatible || isMapped || isTranslated || isWellKnownNat64) {
         const prefix = serializeIPv6Words(words.slice(0, 6));
-        const ipv4 = `${words[6] >>> 8}.${words[6] & 0xFF}.${words[7] >>> 8}.${words[7] & 0xFF}`;
+        const ipv4 = `${words[6] >>> 8}.${words[6] & 0xff}.${words[7] >>> 8}.${words[7] & 0xff}`;
         return prefix.endsWith(':') ? prefix + ipv4 : `${prefix}:${ipv4}`;
     }
     return serializeIPv6Words(words);
@@ -510,12 +539,12 @@ function decodeUriTextToIri(component, allowPrivateUse = false) {
         }
         const hexadecimal = component.slice(index + 1, index + 3);
         const octet = Number.parseInt(hexadecimal, 16);
-        if (octet <= 0x7F) {
+        if (octet <= 0x7f) {
             result += isAsciiUnreservedOctet(octet) ? String.fromCharCode(octet) : `%${hexadecimal}`;
             index += 2;
             continue;
         }
-        const sequenceLength = octet >= 0xC2 && octet <= 0xDF ? 2 : octet >= 0xE0 && octet <= 0xEF ? 3 : octet >= 0xF0 && octet <= 0xF4 ? 4 : 0;
+        const sequenceLength = octet >= 0xc2 && octet <= 0xdf ? 2 : octet >= 0xe0 && octet <= 0xef ? 3 : octet >= 0xf0 && octet <= 0xf4 ? 4 : 0;
         let encodedSequence = '';
         // Collect exactly one candidate scalar without consuming malformed trailing input.
         for (let sequenceIndex = 0; sequenceIndex < sequenceLength; sequenceIndex++) {
@@ -587,8 +616,8 @@ function normalizeParsedReference(parts, options = {}) {
     const rootlessRelativePath = normalizedParts.scheme === undefined && normalizedParts.authority === undefined && normalizedParts.path.length > 0 && !normalizedParts.path.startsWith('/');
     if (!rootlessRelativePath) {
         const reducedPath = removeDotSegments(normalizedParts.path);
-        // Preserve a no-authority path when reduction would reparse it as an authority.
-        if (normalizedParts.authority !== undefined || !reducedPath.startsWith('//')) normalizedParts.path = reducedPath;
+        // Preserve no-authority and file paths when reduction would produce two leading slashes.
+        if ((normalizedParts.authority !== undefined && scheme !== 'file') || !reducedPath.startsWith('//')) normalizedParts.path = reducedPath;
     }
     // Select an explicit target representation only after component normalization is complete.
     if (transform === 'URI') {
@@ -624,5 +653,5 @@ module.exports = {
     parseAbsoluteIri: (string) => parse(string, 'absolute_IRI'),
     resolveReference,
     toRelativeReference,
-    toAbsoluteReference
+    toAbsoluteReference,
 };
