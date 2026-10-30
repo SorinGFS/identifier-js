@@ -1,6 +1,6 @@
 # URI and IRI normalization
 
-Parsed URI and IRI results expose `normalize()` for generic syntax normalization, scheme-specific HTTP, WebSocket, and URN forms, and optional RFC 3987 URI/IRI representation transformation. The method returns a string without modifying the parsed components.
+Parsed URI and IRI results expose `normalize()` for generic syntax normalization, scheme-specific HTTP, WebSocket, file, and URN forms, and optional RFC 3987 URI/IRI representation transformation. The method returns a string without modifying the parsed components.
 
 ## API
 
@@ -58,20 +58,16 @@ parsed.path;
 
 Without a mapper, normalization retains the parser's host classification as an IP literal, IPv4 address, or registered name. IPvFuture literals use generic host case normalization. Non-ASCII IRI host text is retained unless the registered-name mapper supplies another value.
 
-## Path-form preservation
+### Path-form preservation
 
-Generic URI/IRI path normalization applies percent normalization before RFC dot-segment reduction, so encoded unreserved dots participate in reduction. Rootless-relative paths retain their standalone semantics. When reduction would expose leading `//` in a no-authority reference or a `file` identifier, normalization retains the pre-reduction, percent-normalized path. This preserves component boundaries and the [file path form](readme.md#file-grammar). Other authority-bearing paths use the reduced form.
+Generic URI/IRI path normalization applies percent normalization before RFC dot-segment reduction, so encoded unreserved dots participate in reduction. Rootless-relative paths retain their standalone semantics. When reduction would expose leading `//` in a no-authority reference, normalization retains the pre-reduction, percent-normalized path to preserve component boundaries. Authority-bearing paths use the reduced form subject to the [file scheme's path constraint](#file).
 
 ```text
-file:///a/../b       → file:///b
-file:///a/..//b      → file:///a/..//b
-file:/a/..//b        → file:/a/..//b
-file:///a/%2e%2e//b  → file:///a/..//b
 x:/a/..//b           → x:/a/..//b
 x:///a/..//b         → x:////b
 ```
 
-The retained percent-normalized path keeps its dot segments and repeated slashes. Reference resolution applies RFC merging and dot-segment processing, followed by its separate [file-path boundary check](readme.md#reference-resolution).
+The retained percent-normalized path keeps its dot segments and repeated slashes.
 
 ## Scheme-specific normalization
 
@@ -110,6 +106,19 @@ WS://Example.COM:80                  → ws://example.com/
 wss://example.com:00443/chat         → wss://example.com/chat
 ws://example.com?channel=updates     → ws://example.com/?channel=updates
 ```
+
+### File
+
+For `file`, normalization uses the [shared component and percent normalization](#generic-uri-and-iri-syntax-normalization). Within [shared path processing](#path-form-preservation), the scheme's [path-absolute constraint](readme.md#file-grammar) retains the pre-reduction, percent-normalized path when dot-segment removal would expose leading `//`, including in authority-bearing file forms.
+
+```text
+file:///a/../b       → file:///b
+file:///a/..//b      → file:///a/..//b
+file:/a/..//b        → file:/a/..//b
+file:///a/%2e%2e//b  → file:///a/..//b
+```
+
+Reference resolution applies RFC merging and dot-segment processing, followed by its separate [file-path boundary check](readme.md#reference-resolution).
 
 ### URNs
 

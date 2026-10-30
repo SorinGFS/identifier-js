@@ -177,6 +177,8 @@ console.log(resolveReference('?page=2', 'https://example.com/items?page=1#curren
 
 `strict` defaults to `true`. In strict mode, a reference containing a scheme replaces the base identifier even when both schemes are equal. `returnParts` defaults to `false`; when enabled at runtime, the function returns the resolved component object.
 
+Reference resolution merges paths lexically: when a relative path is merged with the base path, supply a base path ending in `/` for directory-shaped merging; otherwise, merging replaces the final base-path segment.
+
 Empty authorities, queries, and fragments are preserved during recomposition where the selected scheme supports them.
 
 Resolution first checks supported combinations of parsed operands, with the base checked before the reference, including the URN checks below. For an effective `file` reference, the query must be absent; a present authority must be host-only and accompany a path beginning with exactly one slash. Empty queries and ports count as present components; see the [file profile](#file-grammar). Supported operands then follow RFC 3986 §5.2 component inheritance, path merging, and dot-segment transformation.
@@ -253,7 +255,7 @@ console.log(parsed.path); // /%7e/a/../b
 
 The method is available from `parseUri`, `parseUriReference`, `parseAbsoluteUri`, `parseIri`, `parseIriReference`, and `parseAbsoluteIri`.
 
-Normalization implements RFC 3986 and RFC 3987 syntax normalization for scheme and host case, percent triplets, ASCII unreserved characters, path dot segments, and component recomposition. IPv6 literals use RFC 5952 text. HTTP(S) default ports and empty paths follow RFC 9110; WS(S) defaults and resource-name paths follow RFC 6455.
+Outside the distinct URN path described below, normalization uses shared component and path processing with scheme-specific rules. It implements RFC 3986 and RFC 3987 syntax normalization for scheme and host case, percent triplets, ASCII unreserved characters, path dot segments, and component recomposition. IPv6 literals use RFC 5952 text. HTTP(S) default ports and empty paths follow RFC 9110; WS(S) defaults and resource-name paths follow RFC 6455. [File normalization](normalization.md#file) retains the percent-normalized path when dot-segment reduction would expose leading `//`, including in authority-bearing forms.
 
 URN normalization lowercases the scheme and NID, uppercases percent-triplet hexadecimal letters without decoding, and preserves NSS case, slashes, and dot segments. The r-, q-, and f-components are retained, so normalized-string equality is not the RFC 8141 URN-equivalence procedure. Namespace-specific equivalence and URN resolution are outside this package's scope. URI/IRI transformation and registered-name mapping options do not alter authority-free, ASCII-only URNs.
 
@@ -261,7 +263,7 @@ For a non-empty registered-name host, `mapRegName` receives the current host spe
 
 With `transform: 'URI'`, non-ASCII userinfo, mapper output, path, query, and fragment text becomes uppercase UTF-8 percent triplets under RFC 3987 §3.1. With `transform: 'IRI'`, eligible percent-encoded ASCII unreserved characters and strictly legal UTF-8 sequences become IRI characters under RFC 3987 §3.2; reserved, malformed, disallowed, and non-UTF-8 octets are retained in percent-encoded form. Private-use characters are decoded only in queries, and forbidden bidirectional formatting characters are retained in percent-encoded form. A mapper can supply the desired Unicode or ASCII hostname representation; this package does not enforce that policy or validate the complete normalized result.
 
-See [`normalization.md`](normalization.md) for the exact RFC section mapping and examples, including [path-form preservation](normalization.md#path-form-preservation) for file and no-authority paths.
+See [`normalization.md`](normalization.md) for the exact RFC section mapping and examples, including [generic path-form preservation](normalization.md#path-form-preservation).
 
 </details>
 
@@ -290,15 +292,16 @@ console.log(isUUIDv4('123e4567-e89b-42d3-9456-426614174000')); // true
 
 ## Processing model
 
-The parser builds its validation logic from declarative RFC grammar fragments. The requested operation establishes the outer RFC 3986 URI or RFC 3987 IRI syntax, and recognized schemes apply tighter syntax where implemented. The selected grammar directly captures its applicable generic components:
+URI and IRI parsing and validation use declarative RFC grammar fragments. The requested operation establishes the outer RFC 3986 URI or RFC 3987 IRI syntax, and recognized schemes apply tighter syntax where implemented:
 
-1. Select the URI or IRI root required by the requested operation.
+1. Select the URI or IRI root required by the parsing or validation operation.
 2. Select generic, DNS-host, `file`, or `urn` scheme rules as applicable.
-3. Merge and recursively expand grammar references through `url-templates`.
-4. Compile with named generic-component captures for parsing or without captures for validation.
-5. Cache the expression by operation, grammar rule, and grammar profile.
-6. Execute the complete expression with Unicode support.
-7. Resolve references by component inheritance, path merging, dot-segment removal, and component recomposition.
+3. Look up the cached expression by operation, grammar rule, and grammar profile.
+4. On a cache miss, merge and recursively expand grammar references through `url-templates`, compile with named generic-component captures for parsing or without captures for validation, and cache the expression.
+5. Execute the complete expression with Unicode support.
+6. On a match, parsing returns the captured components with a non-enumerable `normalize()` method; validation returns `true`.
+
+[Normalization](#normalize-parsed-uri-and-iri-references), [reference resolution](#reference-resolution), and [absolute/relative conversion](#produce-absolute-and-relative-forms) are separate operations on components. Normalization uses a parse result; resolution and conversion parse their string inputs independently.
 
 <details>
 <summary><strong>Lazy compilation and cache behavior</strong></summary>
@@ -342,9 +345,9 @@ file://host/path   (named authority)
 
 The root `/` is valid in each form. Hosts use generic RFC 3986/3987 registered-name, IPv4, or bracketed IP-literal syntax. An authority contains only the host, including the empty host in `file:///path`. Paths begin with exactly one slash and can contain repeated slashes internally. Complete file identifiers comprise the scheme, optional authority, absolute path, and optional fragment; the absolute-URI and absolute-IRI forms end with the path. URI operations use the RFC 3986 character repertoire; IRI operations use the RFC 3987 repertoire in applicable components.
 
-Parsing and reference operations process identifier text and components. `file:/C:/path` is an absolute URI whose path is `/C:/path`. Reference resolution merges paths lexically: supply a base path ending in `/` for directory-shaped merging; otherwise, merging replaces the final base-path segment.
+Parsing and reference operations process identifier text and components. `file:/C:/path` is an absolute URI whose path is `/C:/path`.
 
-See the [resolution boundary](#reference-resolution) and [normalization path policy](normalization.md#path-form-preservation) for operation-specific behavior.
+See the [resolution boundary](#reference-resolution) and [file normalization path policy](normalization.md#file) for operation-specific behavior.
 
 </details>
 
